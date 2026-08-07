@@ -1,0 +1,23 @@
+[Unit]
+Description=carodi opportunity funnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/carodi
+ExecStart=/opt/carodi/.venv/bin/carodi run
+EnvironmentFile=/opt/carodi/.env
+
+# The digest is not worth a stuck process holding the timer open.
+TimeoutStartSec=900
+
+# It only ever needs to read configs and write data/.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/carodi/data
+
+[Install]
+WantedBy=multi-user.target

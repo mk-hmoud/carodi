@@ -1,0 +1,131 @@
+# Who you are and what counts as a match.
+# This file is the whole filter. Tune it with `carodi run --dry-run --explain`
+# until the rejection breakdown stops throwing away things you wanted.
+
+identity:
+  nationality: JO
+  based_in: CY
+  graduating: 2027-06        # ~1 year out; internships and new-grad roles are in scope
+
+# Onsite roles outside this list are rejected outright.
+# Quoted because YAML 1.1 parses bare NO (Norway) as boolean false.
+target_countries: ["GB", "IE", "DE", "NL", "SE", "DK", "NO", "FI", "CH", "AT", "BE",
+                   "FR", "ES", "PT", "IT", "PL", "CZ", "EE", "LU", "US", "CA"]
+
+remote:
+  accept: true
+  accept_anywhere: true      # "work from anywhere" postings
+  accept_eu_wide: true       # "remote (Europe)" / EMEA / CET-timezone postings
+
+hard_filters:
+  # Onsite roles in countries that publish a sponsor register must be at an
+  # employer on that register. This is the single highest-value rule here.
+  require_sponsor_if_onsite: true
+  sponsor_required_countries: [GB, NL]
+
+  max_age_days: 45
+
+  # You are ~1 year from a master's. These titles are not going to sponsor a
+  # new grad, and they dominate every board.
+  exclude_titles:
+    - senior
+    - staff
+    - principal
+    - lead
+    - head of
+    - director
+    - vp
+    - vice president
+    - manager
+    - architect
+    - fellow engineer
+    - distinguished
+
+  # Phrases that reliably mean "you specifically cannot take this job".
+  exclude_phrases:
+    - security clearance
+    - us citizen
+    - us citizenship
+    - citizens only
+    - permanent resident
+    - green card
+    - must be authorized to work
+    - no visa sponsorship
+    - visa sponsorship is not available
+    - unable to sponsor
+    - not able to sponsor
+    - active clearance
+    - polygraph
+
+keywords:
+  # Where must_any is checked. "title" is strongly recommended: job descriptions
+  # name every technology a company touches, so checking "all" lets sales and HR
+  # roles through on the strength of boilerplate.
+  must_any_scope: title
+
+  # At least one of these must appear in the title, or it is not your field.
+  must_any:
+    - software engineer
+    - software developer
+    - backend
+    - back end
+    - frontend
+    - front end
+    - full stack
+    - fullstack
+    - platform engineer
+    - infrastructure engineer
+    - systems engineer
+    - embedded
+    - firmware
+    - computer engineer
+    - graduate engineer
+    - new grad
+    - intern
+    - internship
+    - working student
+    - junior developer
+    - data engineer
+    - machine learning engineer
+
+  # Weights are arbitrary; only their ratios matter. Edit freely.
+  # Matched against the whole posting, punctuation intact — "c++" and "node.js"
+  # match literally, and "go" will not fire inside "golang".
+  boost:
+    graduate program: 6
+    new grad: 6
+    internship: 5
+    working student: 5
+    junior: 4
+    entry level: 4
+    visa sponsorship: 6
+    relocation: 5
+    relocation package: 5
+    blue card: 6
+    skilled worker: 4
+    python: 3
+    typescript: 2
+    golang: 2
+    rust: 2
+    c++: 2
+    embedded: 2
+    kubernetes: 1
+    distributed systems: 2
+    "0-2 years": 4
+    "1-3 years": 3
+    "2+ years": 1
+
+  penalize:
+    "5+ years": -4
+    "7+ years": -6
+    "8+ years": -6
+    "10+ years": -8
+    on-call rotation: -1
+    unpaid: -6
+    equity only: -6
+    commission only: -6
+
+scoring:
+  threshold: 6             # raise this when the digest gets noisy
+  target_country_bonus: 3
+  sponsor_bonus: 5

@@ -1,0 +1,122 @@
+settings:
+  db_path: data/carodi.db
+  digest_limit: 20
+  telegram_disable_preview: true
+
+# Employer lists that can legally sponsor you. See carodi/enrichment/sponsors.py
+# for where to download these; the URLs are dated and change on every update, so
+# they are not hardcoded.
+sponsor_registers:
+  - country: GB
+    path: data/registers/uk_licensed_sponsors.csv
+    enabled: true
+    # The register covers every sponsorship route, most of which cannot hire a
+    # software engineer: Charity Worker, Creative Worker, Ministers of Religion,
+    # Seasonal Worker. The Global Business Mobility routes are excluded too --
+    # they require you to already work for the group overseas, so they are no
+    # use for a cold application. Drop this list to match on any route.
+    routes: ["Skilled Worker", "Scale-up"]
+    route_column: "Route"
+
+  - country: NL
+    path: data/registers/nl_recognised_sponsors.csv
+    enabled: true
+    # IND publishes one register per purpose; this is the highly-skilled-migrant
+    # one, so every row already qualifies and there is no route column.
+    name_column: "name"
+
+sources:
+  # -- curated deadline calendar ------------------------------------------
+  # Not a scraper. Re-announces hand-maintained entries as they approach.
+  - type: deadlines
+    enabled: true
+    params:
+      name: calendar
+      file: config/deadlines.yaml
+      alerts: [120, 90, 60, 30, 14, 7, 3, 1]
+
+  # -- ATS boards ---------------------------------------------------------
+  # The highest-signal source available. Add companies you would actually
+  # work for; the board token is the last path segment of their careers URL.
+  # Verify each token with: carodi check greenhouse
+  # Every token below was verified to return 200 on 2026-08-07. Companies move
+  # between ATS vendors, so a 404 here means "look up their careers page again",
+  # not "carodi is broken" -- the run continues either way.
+  - type: greenhouse
+    enabled: true
+    params:
+      name: greenhouse
+      boards:
+        - monzo
+        - gocardless
+        - cloudflare
+        - datadog
+        - elastic
+        - airbnb
+        - stripe
+        - databricks
+        - figma
+
+  - type: lever
+    enabled: true
+    params:
+      name: lever
+      boards:
+        - spotify
+        - plaid
+
+  - type: ashby
+    enabled: true
+    params:
+      name: ashby
+      boards:
+        - ramp
+        - linear
+        - vercel
+        - deel
+        - posthog
+
+  # -- open job APIs ------------------------------------------------------
+  - type: json_board
+    enabled: true
+    params:
+      name: remotive
+      url: https://remotive.com/api/remote-jobs?category=software-dev
+      items_path: jobs
+      title_field: title
+      org_field: company_name
+      url_field: url
+      location_field: candidate_required_location
+      description_field: description
+      tags_field: tags
+
+  - type: json_board
+    enabled: true
+    params:
+      name: arbeitnow
+      url: https://www.arbeitnow.com/api/job-board-api
+      items_path: data
+      title_field: title
+      org_field: company_name
+      url_field: url
+      location_field: location
+      description_field: description
+      tags_field: tags
+
+  # -- feeds --------------------------------------------------------------
+  - type: rss
+    enabled: true
+    params:
+      name: weworkremotely
+      url: https://weworkremotely.com/categories/remote-programming-jobs.rss
+      org_from_title: true
+      separator: ":"
+
+  # -- freeform -----------------------------------------------------------
+  # Noisy, but surfaces roles that never reach a job board. The filter earns
+  # its keep here.
+  - type: hn_whoishiring
+    enabled: true
+    params:
+      name: hn
+      limit: 400

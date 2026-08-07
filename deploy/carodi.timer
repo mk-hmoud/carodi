@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the carodi funnel daily
+
+[Timer]
+# 07:30 local. Persistent so a reboot or downtime does not silently skip a day.
+OnCalendar=*-*-* 07:30:00
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

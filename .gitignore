@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Local state and secrets
+data/*.db
+data/*.db-journal
+.env
+
+# Sponsor registers are large and republished often — fetch them, don't commit them.
+data/registers/*.csv
+data/registers/*.xlsx
