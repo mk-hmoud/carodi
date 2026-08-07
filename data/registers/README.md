@@ -3,10 +3,14 @@
 The CSVs live here. They are the reason this project exists: they turn a
 firehose of postings into the subset at employers legally able to hire you.
 
-**Installed 2026-08-07:** UK (121,140 employers after route filtering) and
-Netherlands (12,823). Both governments publish dated files whose URLs change on
-every update, so they are not auto-downloaded — refresh every month or two. The
-UK register in particular churns constantly as licences are granted and revoked.
+**A snapshot dated 2026-08-07 is committed to this repo** so it works out of the
+box: UK (121,140 employers after route filtering) and Netherlands (12,823).
+
+That snapshot goes stale. Both governments publish dated files whose URLs change
+on every update, so nothing here is auto-downloaded — refresh every month or two
+by overwriting the file in place, which shows up as an ordinary diff. The UK
+register in particular churns constantly as licences are granted and revoked, so
+treat a match against an old snapshot as a strong hint rather than a guarantee.
 
 ## United Kingdom — `uk_licensed_sponsors.csv`
 

@@ -9,6 +9,11 @@ data/*.db
 data/*.db-journal
 .env
 
-# Sponsor registers are large and republished often — fetch them, don't commit them.
+# Sponsor registers are large and republished every few weeks. One dated
+# snapshot of each is committed so the repo works out of the box; any other
+# CSV you drop here (a fresher download under its original filename) stays
+# local. Refreshing a snapshot in place shows up as an ordinary diff.
 data/registers/*.csv
 data/registers/*.xlsx
+!data/registers/uk_licensed_sponsors.csv
+!data/registers/nl_recognised_sponsors.csv
