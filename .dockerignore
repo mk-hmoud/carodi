@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+**/__pycache__
+**/*.py[cod]
+*.egg-info
+.pytest_cache
+
+# Mounted at runtime rather than baked in, so the 11MB register snapshot never
+# enters the build context or the image layers.
+data
+config
+
+tests
+deploy
+README.md

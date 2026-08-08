@@ -1,0 +1,26 @@
+services:
+  carodi:
+    build: .
+    image: carodi:local
+
+    # Run as the invoking user so the SQLite database and any files written into
+    # data/ are owned by you, not root. Override per host:
+    #   CARODI_UID=$(id -u) CARODI_GID=$(id -g) docker compose run --rm carodi
+    user: "${CARODI_UID:-1000}:${CARODI_GID:-1000}"
+
+    env_file:
+      # Optional so `--dry-run` works before you have Telegram credentials.
+      - path: .env
+        required: false
+
+    volumes:
+      # Editable without a rebuild -- profile.yaml and deadlines.yaml are the
+      # two files you actually maintain.
+      - ./config:/app/config:ro
+      # Registers and the SQLite state live on the host: the registers are
+      # refreshed independently of the image, and the database must survive
+      # `docker compose build`.
+      - ./data:/app/data
+
+    # Deliberately no restart policy. This is a oneshot job run by the host
+    # timer, not a daemon; a restart policy would make a failed run spin.

@@ -1,0 +1,30 @@
+[Unit]
+Description=carodi opportunity funnel (docker)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/repos/carodi
+
+# Passed through to compose so the container writes data/carodi.db as you
+# rather than as root. %U and %G expand to the invoking user's uid and gid.
+Environment=CARODI_UID=%U
+Environment=CARODI_GID=%G
+
+# Rebuild before running so a `git pull` takes effect without a manual step.
+# Cached, so it costs about a second when nothing changed. Prefixed with '-'
+# so a transient registry failure logs and still runs the existing image
+# rather than skipping the digest entirely.
+ExecStartPre=-/usr/bin/docker compose build --quiet
+
+# -T because there is no TTY under systemd. --rm so failed runs leave no
+# stopped containers behind.
+ExecStart=/usr/bin/docker compose run --rm -T carodi run
+
+# Generous: a cold build plus a full source sweep. Still bounded, because a
+# stuck run must not hold the timer open indefinitely.
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=default.target

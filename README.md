@@ -136,50 +136,71 @@ Last 30d: 62 delivered · 3 applied · 47 still undecided
 That number is the point of the feature. A decision survives the posting being
 re-scraped, so nothing you have already judged comes back.
 
-## Deploying
-
-Two sets of units ship. `deploy/user/` runs it as you out of a clone in your
-home directory — the right choice for a single-user tool, and the only sudo it
-needs is installing `python3-venv`. `deploy/` runs it as a root-owned system
-service from `/opt/carodi`.
-
-### As a user service (recommended)
+## Running with Docker
 
 ```bash
-sudo apt install -y python3-venv          # the only privileged step
+docker compose build
+CARODI_UID=$(id -u) CARODI_GID=$(id -g) docker compose run --rm carodi run --dry-run
+```
 
+The image pins Python 3.13 rather than tracking whatever the host ships — on a
+very new Python, `pydantic-core` and `rapidfuzz` may have no prebuilt wheel and
+pip falls back to compiling Rust and C++ from source. Pinning the runtime is
+most of the reason to containerise this.
+
+`config/` mounts read-only and `data/` read-write, so you can edit
+`profile.yaml` or refresh a register without rebuilding, and the SQLite
+database survives `docker compose build`. `CARODI_UID`/`CARODI_GID` make the
+container write as you instead of as root — set them or the compose default of
+`1000:1000` applies.
+
+## Deploying
+
+Three sets of units ship, all doing the same thing by different means:
+
+| | runs as | how |
+|---|---|---|
+| `deploy/docker/` | you, user service | `docker compose run` — **recommended** |
+| `deploy/venv/` | you, user service | a virtualenv in the checkout |
+| `deploy/system/` | root, system service | a virtualenv in `/opt/carodi` |
+
+### Docker as a user service (recommended)
+
+Needs no sudo at all, provided you are in the `docker` group.
+
+```bash
 cd ~/repos/carodi
-python3 -m venv .venv && .venv/bin/pip install -e .
+docker compose build
 
 printf 'CARODI_TELEGRAM_TOKEN=...\nCARODI_TELEGRAM_CHAT_ID=...\n' > .env
 chmod 600 .env
 
 mkdir -p ~/.config/systemd/user
-cp deploy/user/carodi.{service,timer} ~/.config/systemd/user/
+cp deploy/docker/carodi.{service,timer} ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now carodi.timer
 
-loginctl enable-linger "$USER"            # fire even when you're not logged in
+loginctl enable-linger "$USER"     # fire even when you're not logged in
 ```
 
-Update with `git pull`. Check on it with:
+Update with `git pull` — the unit rebuilds before each run, so code changes
+take effect on the next digest with no extra step.
 
 ```bash
 systemctl --user list-timers carodi.timer
 journalctl --user -u carodi.service -n 50
-systemctl --user start carodi.service     # run one now, off-schedule
+systemctl --user start carodi.service      # run one now, off-schedule
 ```
 
-> The system units in `deploy/` set `ProtectHome=true`, so they cannot read a
-> repo under `/home`. Use `deploy/user/` for a home-directory checkout, or copy
-> the tree to `/opt/carodi` for the system units.
+> `deploy/system/` sets `ProtectHome=true`, so those units cannot read a repo
+> under `/home`. Use them only with the tree copied to `/opt/carodi`.
 
 `Persistent=true` means a reboot or downtime runs the missed digest rather than
 silently skipping a day — which would also skip that day's deadline alerts.
 
 The timer is pinned to `Europe/Nicosia` rather than the host clock, so the
 digest stays at 08:00 local through daylight-saving changes. Edit `OnCalendar`
-in the timer for your own timezone.
+for your own timezone.
 
 ## Testing
 
