@@ -33,6 +33,12 @@ def _sink(args: argparse.Namespace, config: Config):
 
 def cmd_run(args: argparse.Namespace) -> int:
     config = Config.load(args.config)
+
+    # Built before the funnel runs, not after. Constructing it validates the
+    # Telegram credentials, and discovering they are missing should cost a
+    # millisecond rather than a full thirty-second sweep of every source.
+    sink = _sink(args, config)
+
     with Store(config.db_path) as store:
         funnel = Funnel(config, store)
         run_id = None if args.dry_run else store.start_run()
@@ -49,7 +55,6 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print(f"  {count:5d}  {reason}", file=sys.stderr)
 
         items = result.new[: args.limit or config.digest_limit]
-        sink = _sink(args, config)
         sink.deliver(items, store.accountability(), result.source_errors)
 
         if not args.dry_run:
@@ -247,7 +252,10 @@ def main(argv: list[str] | None = None) -> int:
     _setup_logging(args.verbose)
     try:
         return int(args.func(args))
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
+        # Misconfiguration, not a crash: a missing config file or absent
+        # Telegram credentials should read as one line in the journal, not a
+        # traceback that buries the one sentence telling you what to fix.
         print(f"error: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
