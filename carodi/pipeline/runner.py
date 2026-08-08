@@ -30,6 +30,7 @@ class RunResult:
     fetched: int = 0
     after_dedupe: int = 0
     passed: int = 0
+    orgs_seen: int = 0
     new: list[Opportunity] = field(default_factory=list)
     rejections: Counter = field(default_factory=Counter)
     source_counts: Counter = field(default_factory=Counter)
@@ -40,6 +41,7 @@ class RunResult:
             "fetched": self.fetched,
             "after_dedupe": self.after_dedupe,
             "passed": self.passed,
+            "orgs_seen": self.orgs_seen,
             "new": len(self.new),
             "top_rejections": dict(self.rejections.most_common(8)),
             "sources": dict(self.source_counts),
@@ -86,6 +88,9 @@ class Funnel:
             self.sponsors.apply(opp)
 
             verdict = self.rules.evaluate(opp)
+            # Recorded before the filter decides, on purpose: a company whose
+            # current openings are all senior is still a lead worth watching,
+            # and is exactly what `carodi discover` seeds from.
             if not verdict.passed:
                 result.rejections[verdict.rejected_by or "unknown"] += 1
                 continue
@@ -100,6 +105,7 @@ class Funnel:
                 result.new.append(opp)
 
         if not dry_run:
+            result.orgs_seen = self.store.record_orgs(merged)
             self.store.commit()
 
         result.new.sort(key=lambda o: o.score, reverse=True)

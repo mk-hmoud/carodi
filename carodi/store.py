@@ -69,6 +69,35 @@ CREATE TABLE IF NOT EXISTS runs (
     finished_at TEXT,
     stats       TEXT
 );
+
+-- Every employer the funnel has ever seen, whether or not its roles passed.
+-- This is the seed list for `carodi discover`: companies a job board already
+-- listed are real tech employers by construction, which no heuristic over
+-- register names manages to be.
+CREATE TABLE IF NOT EXISTS seen_orgs (
+    org_key           TEXT PRIMARY KEY,
+    org               TEXT NOT NULL,
+    sponsor_countries TEXT,
+    first_seen        TEXT NOT NULL,
+    last_seen         TEXT NOT NULL,
+    times_seen        INTEGER NOT NULL DEFAULT 1
+);
+
+-- Probe results, cached forever so a token is never re-requested. Negative
+-- results matter as much as positive ones: most companies have no public
+-- board, and re-checking them nightly would be pure waste.
+CREATE TABLE IF NOT EXISTS ats_probes (
+    token         TEXT NOT NULL,
+    provider      TEXT NOT NULL,
+    org_key       TEXT NOT NULL,
+    found         INTEGER NOT NULL,
+    declared_name TEXT,
+    confidence    INTEGER NOT NULL DEFAULT 0,
+    job_count     INTEGER,
+    probed_at     TEXT NOT NULL,
+    PRIMARY KEY (token, provider)
+);
+CREATE INDEX IF NOT EXISTS idx_probe_found ON ats_probes(found, confidence);
 """
 
 #: Terminal states -- these never reappear in a digest.
@@ -209,6 +238,95 @@ class Store:
             (limit,),
         ).fetchall()
         return [to_opportunity(r) for r in rows]
+
+    # -- employer harvest -----------------------------------------------------
+
+    def record_orgs(self, items: Iterable[Opportunity]) -> int:
+        """Remember every employer seen this run, passing or not.
+
+        Called with the deduped set *before* filtering: a company whose current
+        openings are all senior is still worth watching, and is exactly the kind
+        of lead the filter would otherwise throw away.
+        """
+        now = datetime.now().isoformat(timespec="seconds")
+        rows = 0
+        for opp in items:
+            key = opp.org_key
+            if not key:
+                continue
+            # Only registers matching at >=90 reach sponsor_countries, so the
+            # 60%-confidence noise never gets promoted into a discovery lead.
+            sponsors = json.dumps(opp.enrichment.get("sponsor_countries") or [])
+            self.conn.execute(
+                """INSERT INTO seen_orgs (org_key, org, sponsor_countries, first_seen,
+                                          last_seen, times_seen)
+                   VALUES (?,?,?,?,?,1)
+                   ON CONFLICT(org_key) DO UPDATE SET
+                       last_seen = excluded.last_seen,
+                       times_seen = times_seen + 1,
+                       sponsor_countries = excluded.sponsor_countries""",
+                (key, opp.org, sponsors, now, now),
+            )
+            rows += 1
+        return rows
+
+    def seed_orgs(self, sponsored_only: bool = True, limit: int | None = None) -> list[dict]:
+        """Employers to probe for a public job board, most-seen first."""
+        sql = "SELECT org_key, org, sponsor_countries, times_seen FROM seen_orgs"
+        if sponsored_only:
+            sql += " WHERE sponsor_countries IS NOT NULL AND sponsor_countries != '[]'"
+        sql += " ORDER BY times_seen DESC, org_key ASC"
+        if limit:
+            sql += f" LIMIT {int(limit)}"
+        return [
+            {
+                "org_key": r["org_key"],
+                "org": r["org"],
+                "sponsors": json.loads(r["sponsor_countries"] or "[]"),
+                "times_seen": r["times_seen"],
+            }
+            for r in self.conn.execute(sql).fetchall()
+        ]
+
+    def cached_probe(self, token: str, provider: str) -> sqlite3.Row | None:
+        return self.conn.execute(
+            "SELECT * FROM ats_probes WHERE token = ? AND provider = ?", (token, provider)
+        ).fetchone()
+
+    def record_probe(
+        self,
+        token: str,
+        provider: str,
+        org_key: str,
+        found: bool,
+        declared_name: str | None = None,
+        confidence: int = 0,
+        job_count: int | None = None,
+    ) -> None:
+        self.conn.execute(
+            """INSERT INTO ats_probes (token, provider, org_key, found, declared_name,
+                                       confidence, job_count, probed_at)
+               VALUES (?,?,?,?,?,?,?,?)
+               ON CONFLICT(token, provider) DO UPDATE SET
+                   found = excluded.found,
+                   declared_name = excluded.declared_name,
+                   confidence = excluded.confidence,
+                   job_count = excluded.job_count,
+                   probed_at = excluded.probed_at""",
+            (
+                token, provider, org_key, int(found), declared_name, confidence,
+                job_count, datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+
+    def discovered(self, min_confidence: int = 0) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT p.*, o.org, o.sponsor_countries FROM ats_probes p "
+            "LEFT JOIN seen_orgs o ON o.org_key = p.org_key "
+            "WHERE p.found = 1 AND p.confidence >= ? "
+            "ORDER BY p.confidence DESC, p.job_count DESC",
+            (min_confidence,),
+        ).fetchall()
 
     def count_undecided(self) -> int:
         return int(

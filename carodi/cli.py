@@ -91,6 +91,60 @@ def cmd_sources(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_discover(args: argparse.Namespace) -> int:
+    """Find public job boards belonging to employers who can sponsor you."""
+    from carodi.discover import Discoverer, as_sources_yaml
+
+    config = Config.load(args.config)
+    providers = [p.strip() for p in args.providers.split(",") if p.strip()]
+
+    with Store(config.db_path) as store:
+        seeds = store.seed_orgs(sponsored_only=not args.all, limit=args.limit)
+        if not seeds:
+            print(
+                "no seed employers yet.\n"
+                "`carodi discover` learns from companies the funnel has seen, so run\n"
+                "`carodi run` at least once first (a --dry-run does not record them)."
+            )
+            return 1
+
+        print(f"seeding from {len(seeds)} employer(s)"
+              f"{'' if args.all else ' on a sponsor register'}\n")
+
+        disc = Discoverer(store, providers=providers, delay=args.delay)
+        hits = disc.run(sponsored_only=not args.all, limit=args.limit)
+
+        trusted = [h for h in hits if h.trusted]
+        review = [h for h in hits if not h.trusted]
+
+        print(f"\n{'=' * 62}")
+        print(f"requests made:   {disc.requests_made}   (cache hits: {disc.cache_hits})")
+        print(f"boards found:    {len(hits)}")
+        print(f"  verified:      {len(trusted)}")
+        print(f"  need review:   {len(review)}")
+        print(f"{'=' * 62}\n")
+
+        if trusted:
+            print("VERIFIED — safe to add:")
+            for h in sorted(trusted, key=lambda x: -x.confidence):
+                jobs = f"{h.job_count} jobs" if h.job_count else ""
+                print(f"  [{h.confidence:3d}] {h.provider:11s} {h.token:24s} "
+                      f"{(h.declared_name or h.org)[:26]:28s} {'/'.join(h.sponsors):6s} {jobs}")
+
+        if review:
+            print("\nNEEDS REVIEW — provider does not declare a company name,"
+                  "\nso the token could belong to someone else entirely:")
+            for h in review:
+                jobs = f"{h.job_count} jobs" if h.job_count else ""
+                print(f"        {h.provider:11s} {h.token:24s} "
+                      f"{h.org[:26]:28s} {'/'.join(h.sponsors):6s} {jobs}")
+
+        if args.emit:
+            print("\n# --- paste into config/sources.yaml under `sources:` ---")
+            print(as_sources_yaml(hits))
+    return 0
+
+
 def cmd_bot(args: argparse.Namespace) -> int:
     """Long-poll for button taps from the digest. Runs until stopped."""
     from carodi.bot import Bot
@@ -248,6 +302,15 @@ def main(argv: list[str] | None = None) -> int:
 
     p_sources = sub.add_parser("sources", help="list source types and configured instances")
     p_sources.set_defaults(func=cmd_sources)
+
+    p_disc = sub.add_parser("discover", help="find job boards of employers who can sponsor you")
+    p_disc.add_argument("--all", action="store_true",
+                        help="probe every seen employer, not just sponsor-verified ones")
+    p_disc.add_argument("--limit", type=int, default=None, help="max employers to probe")
+    p_disc.add_argument("--providers", default="greenhouse,lever,ashby")
+    p_disc.add_argument("--delay", type=float, default=0.15, help="seconds between requests")
+    p_disc.add_argument("--emit", action="store_true", help="print a sources.yaml block")
+    p_disc.set_defaults(func=cmd_discover)
 
     p_bot = sub.add_parser("bot", help="handle Applied/Skipped taps from the digest")
     p_bot.add_argument("--once", action="store_true", help="drain pending updates and exit")
