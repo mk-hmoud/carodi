@@ -9,7 +9,9 @@ services:
     user: "${CARODI_UID:-1000}:${CARODI_GID:-1000}"
 
     env_file:
-      # Optional so `--dry-run` works before you have Telegram credentials.
+      # Optional so `--dry-run` works before you have credentials.
+      # Holds CARODI_TELEGRAM_TOKEN, CARODI_TELEGRAM_CHAT_ID, and
+      # CARODI_GEMINI_API_KEY if the LLM stage is enabled.
       - path: .env
         required: false
 

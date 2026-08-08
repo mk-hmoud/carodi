@@ -18,7 +18,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 RUN mkdir -p carodi \
     && touch carodi/__init__.py \
-    && pip install -e . \
+    && pip install -e ".[llm]" \
     && rm carodi/__init__.py
 
 COPY carodi/ ./carodi/
