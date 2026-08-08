@@ -1,0 +1,21 @@
+[Unit]
+Description=carodi opportunity funnel
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/repos/carodi
+ExecStart=%h/repos/carodi/.venv/bin/carodi run
+
+# Leading '-' so a missing .env does not block startup: the Telegram sink then
+# fails with "needs both a bot token and a chat id", which is a far clearer
+# message than systemd refusing to launch the unit at all.
+EnvironmentFile=-%h/repos/carodi/.env
+
+# The digest is not worth a stuck process holding the timer open.
+TimeoutStartSec=900
+
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

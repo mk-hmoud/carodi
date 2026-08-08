@@ -138,15 +138,48 @@ re-scraped, so nothing you have already judged comes back.
 
 ## Deploying
 
+Two sets of units ship. `deploy/user/` runs it as you out of a clone in your
+home directory — the right choice for a single-user tool, and the only sudo it
+needs is installing `python3-venv`. `deploy/` runs it as a root-owned system
+service from `/opt/carodi`.
+
+### As a user service (recommended)
+
 ```bash
-sudo cp -r . /opt/carodi && cd /opt/carodi
-sudo cp deploy/carodi.{service,timer} /etc/systemd/system/
-printf 'CARODI_TELEGRAM_TOKEN=...\nCARODI_TELEGRAM_CHAT_ID=...\n' | sudo tee /opt/carodi/.env
-sudo chmod 600 /opt/carodi/.env
-sudo systemctl enable --now carodi.timer
+sudo apt install -y python3-venv          # the only privileged step
+
+cd ~/repos/carodi
+python3 -m venv .venv && .venv/bin/pip install -e .
+
+printf 'CARODI_TELEGRAM_TOKEN=...\nCARODI_TELEGRAM_CHAT_ID=...\n' > .env
+chmod 600 .env
+
+mkdir -p ~/.config/systemd/user
+cp deploy/user/carodi.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now carodi.timer
+
+loginctl enable-linger "$USER"            # fire even when you're not logged in
 ```
 
-`Persistent=true` means a reboot or downtime does not silently skip a day.
+Update with `git pull`. Check on it with:
+
+```bash
+systemctl --user list-timers carodi.timer
+journalctl --user -u carodi.service -n 50
+systemctl --user start carodi.service     # run one now, off-schedule
+```
+
+> The system units in `deploy/` set `ProtectHome=true`, so they cannot read a
+> repo under `/home`. Use `deploy/user/` for a home-directory checkout, or copy
+> the tree to `/opt/carodi` for the system units.
+
+`Persistent=true` means a reboot or downtime runs the missed digest rather than
+silently skipping a day — which would also skip that day's deadline alerts.
+
+The timer is pinned to `Europe/Nicosia` rather than the host clock, so the
+digest stays at 08:00 local through daylight-saving changes. Edit `OnCalendar`
+in the timer for your own timezone.
 
 ## Testing
 

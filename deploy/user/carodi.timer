@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the carodi funnel daily
+
+[Timer]
+# Pinned to a named timezone rather than the host clock (which is UTC), so the
+# digest stays at 08:00 local across daylight-saving changes. Needs systemd 252+.
+OnCalendar=*-*-* 08:00:00 Europe/Nicosia
+
+# Persistent so a reboot or downtime runs the missed digest instead of silently
+# skipping a day -- which would also skip that day's deadline alerts.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
