@@ -113,28 +113,57 @@ def cmd_llm(args: argparse.Namespace) -> int:
 
     client = genai.Client(api_key=api_key)
 
-    if args.list_models:
-        print("\nmodels this key can reach:")
-        for m in client.models.list():
-            if "generateContent" in (getattr(m, "supported_actions", None) or []):
-                print(f"  {m.name}")
+    if args.list_models or args.probe_models:
+        names = [
+            m.name.removeprefix("models/")
+            for m in client.models.list()
+            if "generateContent" in (getattr(m, "supported_actions", None) or [])
+        ]
+        if args.list_models:
+            print("\nmodels this key can reach:")
+            for n in names:
+                print(f"  {n}")
+            return 0
+
+        # Listing is not usability: models appear here that return 404
+        # ("no longer available to new users") or 429 the moment you call them.
+        from google.genai import types
+
+        print("\nprobing each model with a real request:")
+        for n in names:
+            if "image" in n or "tts" in n or "gemma" in n:
+                continue
+            try:
+                client.models.generate_content(
+                    model=n, contents="Reply with: ok",
+                    config=types.GenerateContentConfig(max_output_tokens=20),
+                )
+                print(f"  usable  {n}")
+            except Exception as exc:  # noqa: BLE001 - probing is the point
+                reason = str(exc).split("'message':")[-1][:70].strip(" {}'\"")
+                print(f"  no      {n:32s} {reason}")
         return 0
+
+    # Fetched live rather than read back from the database: the opportunities
+    # table does not store descriptions, so a reconstructed row would hand the
+    # model an empty string and every field would come back "unmentioned".
+    print(f"\nfetching a live posting from source {args.source!r}...")
+    opp = _sample_posting(config, args.source, args.min_chars)
+    if opp is None:
+        print(f"  no posting with >{args.min_chars} chars of description found")
+        return 1
 
     with Store(config.db_path) as store:
         from carodi.enrich_llm import LlmEnricher
 
-        enricher = LlmEnricher(
-            api_key=api_key, model=cfg.get("model", "gemini-2.5-flash"),
-            store=store, min_interval=0.0,
-            disable_thinking=cfg.get("disable_thinking", True),
-        )
-        sample = store.undecided(limit=1) or store.undelivered(limit=1)
-        if not sample:
-            print("\nno stored posting to test on — run `carodi run` first")
-            return 1
+        model = args.model or cfg.get("model", "gemini-flash-latest")
+        print(f"\nposting: {opp.title} @ {opp.org}  ({len(opp.description)} chars)")
+        print(f"model:   {model}\n")
 
-        opp = sample[0]
-        print(f"\ntest extraction on: {opp.title} @ {opp.org}")
+        enricher = LlmEnricher(
+            api_key=api_key, model=model, store=store, min_interval=0.0,
+            disable_thinking=cfg.get("disable_thinking", False),
+        )
         result = enricher.extract(opp)
         if result is None:
             print("  model returned nothing parseable")
@@ -142,6 +171,24 @@ def cmd_llm(args: argparse.Namespace) -> int:
         for field, value in result.model_dump(mode="json").items():
             print(f"  {field:22s} {value}")
     return 0
+
+
+def _sample_posting(config: Config, source_name: str, min_chars: int) -> Opportunity | None:
+    """Pull one real posting with enough text to actually exercise the model."""
+    entry = next(
+        (
+            e for e in config.sources
+            if e.get("params", {}).get("name") == source_name or e["type"] == source_name
+        ),
+        None,
+    )
+    if entry is None:
+        print(f"  no configured source matching {source_name!r}", file=sys.stderr)
+        return None
+    for opp in build(entry["type"], entry.get("params", {})).fetch():
+        if len(opp.description) >= min_chars:
+            return opp
+    return None
 
 
 def cmd_discover(args: argparse.Namespace) -> int:
@@ -358,7 +405,13 @@ def main(argv: list[str] | None = None) -> int:
 
     p_llm = sub.add_parser("llm", help="check the LLM extraction stage")
     p_llm.add_argument("--list-models", action="store_true",
-                       help="list models this API key can reach")
+                       help="list models this API key can reach (see --probe-models)")
+    p_llm.add_argument("--probe-models", action="store_true",
+                       help="actually call each model — listing does not prove usability")
+    p_llm.add_argument("--model", default=None, help="override the configured model")
+    p_llm.add_argument("--source", default="hn", help="source to pull a sample posting from")
+    p_llm.add_argument("--min-chars", type=int, default=800,
+                       help="minimum description length for the sample")
     p_llm.set_defaults(func=cmd_llm)
 
     p_disc = sub.add_parser("discover", help="find job boards of employers who can sponsor you")
