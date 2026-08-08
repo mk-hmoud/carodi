@@ -15,15 +15,23 @@ settings:
   # covers this volume outright. Results are cached by fingerprint forever, so
   # a posting is read once and steady-state usage is only genuinely new roles.
   llm:
-    enabled: false        # set true once CARODI_GEMINI_API_KEY is set
+    enabled: true
     api_key_env: CARODI_GEMINI_API_KEY
-    model: gemini-2.5-flash
+    # An alias, not a pinned version: it always resolves to a current stable
+    # Flash. Pinned names rot -- gemini-2.5-flash still appears in
+    # models.list() but 404s with "no longer available to new users", and a
+    # *-preview name can be withdrawn outright. For an unattended daily job,
+    # never-404s beats never-changes; verify with `carodi llm --probe-models`.
     # Free-tier quotas are per-minute and per-day. min_interval keeps us under
     # the RPM ceiling (6.5s ≈ 9/min); max_per_run bounds a cold cache, where a
     # first run would otherwise try to read every surviving posting at once.
+    model: gemini-flash-latest
     max_per_run: 40
     min_interval: 6.5
-    disable_thinking: true   # extraction is not a reasoning task
+    # Extraction is not a reasoning task, so thinking tokens are spend for no
+    # gain -- but some models reject a zero budget, and the enricher drops
+    # the option automatically when one does.
+    disable_thinking: true
 
 # Employer lists that can legally sponsor you. See carodi/enrichment/sponsors.py
 # for where to download these; the URLs are dated and change on every update, so

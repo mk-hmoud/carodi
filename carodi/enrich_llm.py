@@ -177,9 +177,24 @@ class LlmEnricher:
     def extract(self, opp: Opportunity) -> Extraction | None:
         """Extract from one posting, or return None if it could not be read."""
         self._throttle()
-        response = self.client.models.generate_content(
-            model=self.model, contents=self._prompt(opp), config=self._config()
-        )
+        prompt = self._prompt(opp)
+        try:
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt, config=self._config()
+            )
+        except Exception as exc:  # noqa: BLE001 - inspected and re-raised below
+            # Not every model accepts a zero thinking budget: the `*-latest`
+            # aliases reject it with a bare 400 INVALID_ARGUMENT. Rather than
+            # let a model name and a boolean in config combine into something
+            # unusable, drop the option once and carry on.
+            if not (self.disable_thinking and "INVALID_ARGUMENT" in str(exc)):
+                raise
+            log.info("%s rejects thinking_budget=0; retrying with thinking on", self.model)
+            self.disable_thinking = False
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt, config=self._config()
+            )
+
         parsed = response.parsed
         if isinstance(parsed, Extraction):
             return parsed
