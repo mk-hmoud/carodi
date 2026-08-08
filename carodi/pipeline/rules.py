@@ -12,6 +12,7 @@ ever reorder what has already passed reject(), never overrule it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -74,9 +75,21 @@ class Rules:
         self.boost = {normalize_text(k): float(v) for k, v in (kw.get("boost") or {}).items()}
         self.penalize = {normalize_text(k): float(v) for k, v in (kw.get("penalize") or {}).items()}
 
-        self.threshold = float(profile.get("scoring", {}).get("threshold", 4))
-        self.country_bonus = float(profile.get("scoring", {}).get("target_country_bonus", 3))
-        self.sponsor_bonus = float(profile.get("scoring", {}).get("sponsor_bonus", 5))
+        scoring = profile.get("scoring", {})
+        self.threshold = float(scoring.get("threshold", 4))
+        self.country_bonus = float(scoring.get("target_country_bonus", 3))
+        self.sponsor_bonus = float(scoring.get("sponsor_bonus", 5))
+
+        # Weights for facts read out of the posting by the LLM stage. All are
+        # score adjustments, never rejections -- see carodi/enrich_llm.py for
+        # why a wrong "sponsorship denied" must demote rather than drop.
+        llm = scoring.get("llm", {})
+        self.llm_sponsorship_offered = float(llm.get("sponsorship_offered", 8))
+        self.llm_sponsorship_denied = float(llm.get("sponsorship_denied", -12))
+        self.llm_entry_level = float(llm.get("entry_level", 4))
+        self.llm_per_excess_year = float(llm.get("per_excess_year", -1.5))
+        self.llm_years_allowed = int(llm.get("years_allowed", 2))
+        self.llm_remote_excluded = float(llm.get("remote_excluded", -8))
 
     # -- hard eligibility -----------------------------------------------------
 
@@ -174,11 +187,67 @@ class Rules:
             score += 2
             reasons.append("+2 has deadline")
 
+        delta, notes = self._score_llm_facts(opp)
+        score += delta
+        reasons.extend(notes)
+
         return score, reasons
 
-    def evaluate(self, opp: Opportunity) -> Verdict:
+    def _score_llm_facts(self, opp: Opportunity) -> tuple[float, list[str]]:
+        """Apply facts read out of the posting text, if the LLM stage ran.
+
+        Every branch adjusts the score. None of them reject: an extraction error
+        must cost you a digest slot, never an opportunity.
+        """
+        facts = opp.enrichment.get("llm")
+        if not isinstance(facts, dict):
+            return 0.0, []
+
+        score = 0.0
+        reasons: list[str] = []
+
+        match facts.get("sponsorship"):
+            case "offered":
+                score += self.llm_sponsorship_offered
+                reasons.append(f"+{self.llm_sponsorship_offered:g} posting offers sponsorship")
+            case "denied":
+                score += self.llm_sponsorship_denied
+                reasons.append(f"{self.llm_sponsorship_denied:+g} posting denies sponsorship")
+
+        if facts.get("is_entry_level"):
+            score += self.llm_entry_level
+            reasons.append(f"+{self.llm_entry_level:g} entry level")
+
+        years = facts.get("min_years_experience")
+        if isinstance(years, int) and years > self.llm_years_allowed:
+            excess = years - self.llm_years_allowed
+            penalty = self.llm_per_excess_year * excess
+            score += penalty
+            reasons.append(f"{penalty:+g} needs {years}y experience")
+
+        # A "remote" role restricted to countries you cannot work from is the
+        # single most common way a promising listing turns out to be useless.
+        restricted = facts.get("remote_restricted_to")
+        if isinstance(restricted, list) and restricted:
+            allowed = {c.upper() for c in restricted}
+            if not (allowed & self.targets):
+                score += self.llm_remote_excluded
+                reasons.append(
+                    f"{self.llm_remote_excluded:+g} remote limited to {', '.join(sorted(allowed))}"
+                )
+
+        return score, reasons
+
+    def evaluate(self, opp: Opportunity, enrich: Callable | None = None) -> Verdict:
         if reason := self.reject(opp):
             return Verdict(passed=False, rejected_by=reason)
+
+        # Hard eligibility is settled above; only now is it worth paying to read
+        # the posting. Placing the hook here is what enforces the invariant that
+        # the LLM can enrich the survivors but never revisit a rejection.
+        if enrich is not None:
+            enrich(opp)
+
         score, reasons = self.score(opp)
 
         # Curated entries are exempt from the score threshold as well: you

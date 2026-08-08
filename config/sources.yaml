@@ -3,6 +3,28 @@ settings:
   digest_limit: 20
   telegram_disable_preview: true
 
+  # Reads job descriptions and extracts structured facts the regexes get wrong:
+  # whether sponsorship is genuinely offered or denied, real years-of-experience
+  # requirements, and whether a "remote" role is secretly geo-restricted.
+  #
+  # Runs after hard eligibility is settled and before scoring, so it can only
+  # rank survivors -- never rescue a rejected role, and never reject one. Every
+  # extracted fact is a score adjustment; see carodi/enrich_llm.py.
+  #
+  # Google Gemini rather than the Anthropic SDK used elsewhere: its free tier
+  # covers this volume outright. Results are cached by fingerprint forever, so
+  # a posting is read once and steady-state usage is only genuinely new roles.
+  llm:
+    enabled: false        # set true once CARODI_GEMINI_API_KEY is set
+    api_key_env: CARODI_GEMINI_API_KEY
+    model: gemini-2.5-flash
+    # Free-tier quotas are per-minute and per-day. min_interval keeps us under
+    # the RPM ceiling (6.5s ≈ 9/min); max_per_run bounds a cold cache, where a
+    # first run would otherwise try to read every surviving posting at once.
+    max_per_run: 40
+    min_interval: 6.5
+    disable_thinking: true   # extraction is not a reasoning task
+
 # Employer lists that can legally sponsor you. See carodi/enrichment/sponsors.py
 # for where to download these; the URLs are dated and change on every update, so
 # they are not hardcoded.

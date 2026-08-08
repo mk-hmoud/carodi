@@ -13,6 +13,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Optional: the LLM extraction stage. The funnel runs without it.
+llm = ["google-genai>=2.0"]
 
 [project.scripts]
 carodi = "carodi.cli:main"

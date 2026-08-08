@@ -98,6 +98,16 @@ CREATE TABLE IF NOT EXISTS ats_probes (
     PRIMARY KEY (token, provider)
 );
 CREATE INDEX IF NOT EXISTS idx_probe_found ON ats_probes(found, confidence);
+
+-- LLM-extracted facts, keyed by fingerprint so a posting is read once, ever.
+-- The model is recorded alongside: swapping models should not silently mix
+-- outputs from two different readers in one digest.
+CREATE TABLE IF NOT EXISTS llm_extractions (
+    fingerprint  TEXT PRIMARY KEY,
+    model        TEXT NOT NULL,
+    payload      TEXT NOT NULL,
+    extracted_at TEXT NOT NULL
+);
 """
 
 #: Terminal states -- these never reappear in a digest.
@@ -327,6 +337,28 @@ class Store:
             "ORDER BY p.confidence DESC, p.job_count DESC",
             (min_confidence,),
         ).fetchall()
+
+    # -- LLM extraction cache -------------------------------------------------
+
+    def cached_extraction(self, fingerprint: str) -> dict | None:
+        row = self.conn.execute(
+            "SELECT payload FROM llm_extractions WHERE fingerprint = ?", (fingerprint,)
+        ).fetchone()
+        return json.loads(row["payload"]) if row else None
+
+    def record_extraction(self, fingerprint: str, model: str, payload: dict) -> None:
+        self.conn.execute(
+            """INSERT INTO llm_extractions (fingerprint, model, payload, extracted_at)
+               VALUES (?,?,?,?)
+               ON CONFLICT(fingerprint) DO UPDATE SET
+                   model = excluded.model,
+                   payload = excluded.payload,
+                   extracted_at = excluded.extracted_at""",
+            (fingerprint, model, json.dumps(payload), datetime.now().isoformat(timespec="seconds")),
+        )
+
+    def count_extractions(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM llm_extractions").fetchone()[0])
 
     def count_undecided(self) -> int:
         return int(

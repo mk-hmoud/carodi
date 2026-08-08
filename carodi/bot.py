@@ -61,6 +61,9 @@ def render_card(opp: Opportunity, index: int, total: int) -> Card:
         lines.append(esc(badge))
     if opp.deadline:
         lines.append(f"⏳ closes {opp.deadline.isoformat()}")
+    facts = opp.enrichment.get("llm")
+    if isinstance(facts, dict) and facts.get("one_line_fit"):
+        lines.append(f"\n💬 {esc(facts['one_line_fit'])}")
     if opp.reasons:
         lines.append(f"\n<i>{esc(', '.join(opp.reasons))}</i>")
 

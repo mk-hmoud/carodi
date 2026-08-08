@@ -91,6 +91,59 @@ def cmd_sources(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_llm(args: argparse.Namespace) -> int:
+    """Check the LLM stage: which models the key can reach, and a live extraction.
+
+    Worth its own command because the stage runs unattended and degrades quietly
+    by design -- a bad key or a renamed model would otherwise show up only as
+    matches that never get enriched.
+    """
+    config = Config.load(args.config)
+    cfg = config.settings.get("llm") or {}
+    key_env = cfg.get("api_key_env", "CARODI_GEMINI_API_KEY")
+    api_key = os.environ.get(key_env, "")
+
+    print(f"enabled:  {bool(cfg.get('enabled'))}")
+    print(f"model:    {cfg.get('model')}")
+    print(f"key:      {'set via ' + key_env if api_key else 'MISSING (' + key_env + ')'}")
+    if not api_key:
+        return 1
+
+    from google import genai
+
+    client = genai.Client(api_key=api_key)
+
+    if args.list_models:
+        print("\nmodels this key can reach:")
+        for m in client.models.list():
+            if "generateContent" in (getattr(m, "supported_actions", None) or []):
+                print(f"  {m.name}")
+        return 0
+
+    with Store(config.db_path) as store:
+        from carodi.enrich_llm import LlmEnricher
+
+        enricher = LlmEnricher(
+            api_key=api_key, model=cfg.get("model", "gemini-2.5-flash"),
+            store=store, min_interval=0.0,
+            disable_thinking=cfg.get("disable_thinking", True),
+        )
+        sample = store.undecided(limit=1) or store.undelivered(limit=1)
+        if not sample:
+            print("\nno stored posting to test on — run `carodi run` first")
+            return 1
+
+        opp = sample[0]
+        print(f"\ntest extraction on: {opp.title} @ {opp.org}")
+        result = enricher.extract(opp)
+        if result is None:
+            print("  model returned nothing parseable")
+            return 1
+        for field, value in result.model_dump(mode="json").items():
+            print(f"  {field:22s} {value}")
+    return 0
+
+
 def cmd_discover(args: argparse.Namespace) -> int:
     """Find public job boards belonging to employers who can sponsor you."""
     from carodi.discover import Discoverer, as_sources_yaml
@@ -302,6 +355,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_sources = sub.add_parser("sources", help="list source types and configured instances")
     p_sources.set_defaults(func=cmd_sources)
+
+    p_llm = sub.add_parser("llm", help="check the LLM extraction stage")
+    p_llm.add_argument("--list-models", action="store_true",
+                       help="list models this API key can reach")
+    p_llm.set_defaults(func=cmd_llm)
 
     p_disc = sub.add_parser("discover", help="find job boards of employers who can sponsor you")
     p_disc.add_argument("--all", action="store_true",

@@ -10,6 +10,7 @@ changed its schema is a funnel you stop trusting.
 from __future__ import annotations
 
 import logging
+import os
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -35,6 +36,7 @@ class RunResult:
     rejections: Counter = field(default_factory=Counter)
     source_counts: Counter = field(default_factory=Counter)
     source_errors: dict[str, str] = field(default_factory=dict)
+    llm_stats: dict = field(default_factory=dict)
 
     def as_stats(self) -> dict:
         return {
@@ -42,6 +44,7 @@ class RunResult:
             "after_dedupe": self.after_dedupe,
             "passed": self.passed,
             "orgs_seen": self.orgs_seen,
+            "llm": self.llm_stats,
             "new": len(self.new),
             "top_rejections": dict(self.rejections.most_common(8)),
             "sources": dict(self.source_counts),
@@ -55,6 +58,31 @@ class Funnel:
         self.store = store
         self.rules = Rules(config.profile)
         self.sponsors = SponsorIndex.from_config(config.registers)
+        self.llm = self._build_enricher()
+
+    def _build_enricher(self):
+        """Construct the LLM stage, or None if it is disabled or unusable.
+
+        A misconfigured enricher must not stop the digest: the deterministic
+        signals work without it, so a failure here logs and degrades.
+        """
+        cfg = self.config.settings.get("llm") or {}
+        if not cfg.get("enabled"):
+            return None
+        try:
+            from carodi.enrich_llm import LlmEnricher
+
+            return LlmEnricher(
+                api_key=os.environ.get(cfg.get("api_key_env", "CARODI_GEMINI_API_KEY"), ""),
+                model=cfg.get("model", "gemini-2.5-flash"),
+                store=self.store,
+                max_per_run=cfg.get("max_per_run", 40),
+                min_interval=cfg.get("min_interval", 6.5),
+                disable_thinking=cfg.get("disable_thinking", True),
+            )
+        except Exception as exc:  # noqa: BLE001 - optional stage
+            log.warning("LLM enrichment unavailable, continuing without it: %s", exc)
+            return None
 
     def collect(self, result: RunResult) -> list[Opportunity]:
         items: list[Opportunity] = []
@@ -87,7 +115,11 @@ class Funnel:
             geo.annotate(opp)
             self.sponsors.apply(opp)
 
-            verdict = self.rules.evaluate(opp)
+            # The enricher runs inside evaluate(), after reject() and before
+            # score() -- see Rules.evaluate for why that position matters.
+            verdict = self.rules.evaluate(
+                opp, enrich=self.llm.enrich if self.llm else None
+            )
             # Recorded before the filter decides, on purpose: a company whose
             # current openings are all senior is still a lead worth watching,
             # and is exactly what `carodi discover` seeds from.
@@ -103,6 +135,10 @@ class Funnel:
                 result.new.append(opp)
             elif self.store.upsert(opp):
                 result.new.append(opp)
+
+        if self.llm is not None:
+            result.llm_stats = self.llm.stats()
+            log.info("llm extraction: %s", result.llm_stats)
 
         if not dry_run:
             result.orgs_seen = self.store.record_orgs(merged)
