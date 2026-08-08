@@ -36,7 +36,9 @@ class Deadlines(Source):
         self.name = name
         self.file = Path(file)
         self.alerts = sorted(alerts or DEFAULT_ALERTS, reverse=True)
-        # Tolerance in days, so a missed run doesn't silently skip an alert.
+        # Days of catch-up *after* a threshold passes. window=1 fires only on
+        # the exact day, so a single missed run loses that alert forever;
+        # window=3 still fires up to two days late.
         self.window = window
 
     def _next_occurrence(self, deadline: date, recurring: bool, today: date) -> date:
@@ -66,14 +68,23 @@ class Deadlines(Source):
             if days_left < 0:
                 continue
 
-            # Fire only on (or just after) a configured alert threshold.
-            if not any(0 <= days_left - a < self.window for a in self.alerts):
+            # Fire on a threshold, or within `window` days after it passed --
+            # the tolerance must be on the far side of the threshold, or a
+            # missed run is exactly the case it fails to cover.
+            threshold = next(
+                (a for a in self.alerts if 0 <= a - days_left < self.window), None
+            )
+            if threshold is None:
                 continue
 
             yield Opportunity(
                 source=self.name,
                 kind=Kind(entry.get("kind", "scholarship")),
-                title=f"{entry['name']} — closes in {days_left}d",
+                # The threshold, not days_left: the fingerprint is derived from
+                # the title, so a changing number would make each day of the
+                # catch-up window look like a brand new alert and notify twice.
+                # The exact date still reaches you via the deadline field.
+                title=f"{entry['name']} — {threshold}d warning",
                 org=entry.get("org", entry["name"]),
                 url=entry["url"],
                 location_raw=", ".join(entry.get("countries", [])),

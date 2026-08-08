@@ -470,6 +470,32 @@ def test_calendar_fires_on_an_alert_threshold(calendar_file):
     assert "30d" in hit.title
 
 
+def test_a_missed_run_still_fires_the_alert_late(calendar_file):
+    """Regression: the catch-up window sat on the wrong side of the threshold,
+    firing *before* it. A run missed on the exact day lost that alert forever
+    -- the one case the window existed to cover."""
+    cal = Deadlines(file=str(calendar_file), alerts=[30], window=3)
+    # 28 days out: the 30-day mark passed two days ago while nothing ran.
+    [hit] = list(cal.fetch(today=date(2026, 11, 4) - timedelta(days=28)))
+    assert "30d" in hit.title
+
+
+def test_catch_up_window_does_not_fire_early(calendar_file):
+    cal = Deadlines(file=str(calendar_file), alerts=[30], window=3)
+    assert list(cal.fetch(today=date(2026, 11, 4) - timedelta(days=32))) == []
+
+
+def test_alert_title_is_stable_across_the_catch_up_window(calendar_file):
+    """The fingerprint derives from the title, so a title carrying the exact
+    days remaining would make each day of the window a fresh notification."""
+    cal = Deadlines(file=str(calendar_file), alerts=[30], window=3)
+    fingerprints = {
+        next(iter(cal.fetch(today=date(2026, 11, 4) - timedelta(days=d)))).fingerprint
+        for d in (30, 29, 28)
+    }
+    assert len(fingerprints) == 1
+
+
 def test_calendar_skips_deadlines_that_have_passed(calendar_file):
     cal = Deadlines(file=str(calendar_file), alerts=[30])
     # Same day as the deadline is 0 days out, which is not an alert threshold.

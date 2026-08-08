@@ -1,129 +1,226 @@
 # Curated deadline calendar.
 #
-# IMPORTANT: the dates below are the *typical* month/day each programme has used,
-# seeded so the calendar is useful on day one. They are not authoritative and
-# several shift by weeks year to year. Open each URL, confirm the real date, and
-# correct this file — it takes one afternoon and it is the highest-value hour of
-# work in this whole project.
+# VERIFIED 2026-08-08 against each programme's official page or, where the
+# official site blocked automated access, two independent sources that agreed.
+# Entries still carrying `verify-date` are ones whose next-cycle dates the
+# organisers have not published yet; they hold last cycle's pattern.
 #
 # `recurring: true` rolls a past date forward to its next annual occurrence.
-# Set `recurring: false` for one-off deadlines.
+# Set `recurring: false` for a one-off date that should simply expire.
 #
 # Fields: name, url, deadline, kind, org, countries, tags, notes, recurring
 
-- name: Chevening Scholarships (UK)
-  url: https://www.chevening.org/scholarships/
-  deadline: 2026-11-04
-  kind: scholarship
-  org: UK FCDO
-  countries: [GB]
-  tags: [masters, fully-funded, verify-date]
-  notes: >
-    Fully funded UK master's. Jordan is an eligible country. Requires ~2 years
-    work experience — check whether internships/part-time count for you.
+# ---------------------------------------------------------------------------
+# IMMINENT
+# ---------------------------------------------------------------------------
 
-- name: Erasmus Mundus Joint Masters — application window opens
-  url: https://www.eacea.ec.europa.eu/scholarships/erasmus-mundus-catalogue_en
-  deadline: 2026-10-15
-  kind: scholarship
-  org: European Commission
-  countries: [DE, NL, SE, FR, ES, IT, BE, PT]
-  tags: [masters, fully-funded, verify-date]
-  notes: >
-    Each consortium sets its own deadline (mostly Dec–Feb). Browse the catalogue
-    when this fires and add the 3–5 programmes you actually want as their own
-    entries with their real dates.
-
-- name: DAAD Study Scholarships (Germany)
-  url: https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/
-  deadline: 2026-10-01
+- name: DAAD Study Scholarships — STEM / innovation fields
+  url: https://www.daad-jordan.org/en/find-funding/scholarship-database/
+  deadline: 2026-08-31
   kind: scholarship
   org: DAAD
   countries: [DE]
-  tags: [masters, verify-date]
-  notes: Deadlines vary by programme and country of origin. Filter the database for Jordan.
-
-- name: Fulbright Foreign Student Program (Jordan)
-  url: https://foreign.fulbrightonline.org/
-  deadline: 2027-03-01
-  kind: scholarship
-  org: US Department of State
-  countries: [US]
-  tags: [masters, fully-funded, verify-date]
+  tags: [masters, fully-funded, stem, verified-2026-08-08]
   notes: >
-    Administered through the binational commission in Amman, which sets the real
-    deadline. Confirm with the Jordan commission, not the global site.
+    Master's in innovation-driving STEM fields, explicitly open to applicants
+    from developing and emerging countries — Jordan qualifies. Selection
+    February 2027, funding starts May 2027. This is the single best-matched
+    entry in this file for a computer engineering graduate and it closes
+    within weeks. Confirm the exact date in the DAAD Jordan database.
 
-- name: Marie Skłodowska-Curie Doctoral Networks — call opens
-  url: https://marie-sklodowska-curie-actions.ec.europa.eu/
-  deadline: 2027-05-15
-  kind: fellowship
-  org: European Commission
-  countries: [DE, NL, SE, FR, ES, IT, BE, AT, DK, FI]
-  tags: [phd, salaried, verify-date]
+- name: Chevening Scholarships (UK)
+  url: https://www.chevening.org/scholarships/application-timeline/
+  deadline: 2026-10-06
+  kind: scholarship
+  org: UK FCDO
+  countries: [GB]
+  tags: [masters, fully-funded, verified-2026-08-08]
   notes: >
-    Individual PhD positions are advertised by host institutions year-round on
-    EURAXESS. Salaried, and the mobility rule generally favours applicants who
-    have not lived in the host country.
+    Closes 11:00 UTC on 6 October 2026; applications opened 4 August 2026.
+    Fully funded UK master's, Jordan eligible. Requires roughly two years of
+    work experience — check whether internships and part-time work count for
+    you before investing in the essays. Successful candidates must hold an
+    unconditional UK offer by 8 July 2027.
 
-- name: Swedish Institute Scholarships for Global Professionals
-  url: https://si.se/en/apply/scholarships/
-  deadline: 2027-02-10
+- name: DAAD Study Scholarships — all disciplines
+  url: https://www2.daad.de/deutschland/stipendium/datenbank/en/21148-scholarship-database/
+  deadline: 2026-10-30
   kind: scholarship
-  org: Swedish Institute
-  countries: [SE]
-  tags: [masters, fully-funded, verify-date]
-  notes: Jordan is usually on the eligible-country list. Requires prior university admission.
+  org: DAAD
+  countries: [DE]
+  tags: [masters, verified-2026-08-08]
+  notes: >
+    The general track, distinct from the STEM call above. Applications open
+    1 September. Deadlines vary by programme and country of origin, so filter
+    the database for Jordan rather than trusting this date alone.
 
-- name: Eiffel Excellence Scholarship (France)
-  url: https://www.campusfrance.org/en/eiffel-scholarship-program-of-excellence
-  deadline: 2027-01-10
-  kind: scholarship
-  org: Campus France
-  countries: [FR]
-  tags: [masters, verify-date]
-  notes: Nominated by the host institution — you cannot apply directly, so contact schools early.
+# ---------------------------------------------------------------------------
+# AUTUMN / WINTER
+# ---------------------------------------------------------------------------
 
-- name: Gates Cambridge Scholarship
-  url: https://www.gatescambridge.org/
-  deadline: 2026-12-03
-  kind: scholarship
-  org: University of Cambridge
-  countries: [GB]
-  tags: [masters, phd, fully-funded, verify-date]
-
-- name: Clarendon Fund (Oxford)
-  url: https://www.ox.ac.uk/clarendon
-  deadline: 2027-01-07
-  kind: scholarship
-  org: University of Oxford
-  countries: [GB]
-  tags: [masters, phd, verify-date]
-  notes: No separate application — you are considered automatically if you meet the course deadline.
-
-- name: ETH Zurich Excellence Masters Scholarship
-  url: https://ethz.ch/en/studies/financial/scholarships.html
-  deadline: 2026-12-15
+- name: ETH Zurich Excellence Scholarship (ESOP)
+  url: https://ethz.ch/students/en/studies/financial/scholarships/excellencescholarship.html
+  deadline: 2026-11-30
   kind: scholarship
   org: ETH Zurich
   countries: [CH]
-  tags: [masters, verify-date]
+  tags: [masters, fully-funded, verified-2026-08-08]
+  notes: >
+    Application window is 1–30 November 2026 only, for a Master's start in
+    autumn 2027. Applied for through eApply as part of the Master application.
+    Needs roughly top-10% Bachelor results. CHF 12,000 per semester plus a
+    tuition waiver.
 
-- name: TU Delft Justus & Louise van Effen Scholarship
+- name: Erasmus Mundus Joint Masters — pick your programmes
+  url: https://www.eacea.ec.europa.eu/scholarships/erasmus-mundus-catalogue_en
+  deadline: 2026-11-15
+  kind: scholarship
+  org: European Commission
+  countries: [DE, NL, SE, FR, ES, IT, BE, PT]
+  tags: [masters, fully-funded, verified-2026-08-08]
+  notes: >
+    Not a single deadline. The Commission selected 37 new joint masters on
+    16 July 2026; consortia open applications through autumn 2026 with their
+    own deadlines, mostly November to January, a few into February. You may
+    apply to up to three. Treat this alert as the prompt to browse the
+    catalogue and add the three you actually want as their own entries with
+    their real dates.
+
+- name: TU Delft Justus & Louise van Effen Excellence Scholarship
   url: https://www.tudelft.nl/en/education/practical-matters/scholarships
   deadline: 2026-12-01
   kind: scholarship
   org: TU Delft
   countries: [NL]
-  tags: [masters, fully-funded, verify-date]
+  tags: [masters, fully-funded, verified-2026-08-08]
+  notes: >
+    23:59 CET on 1 December 2026. Requires a completed MSc programme
+    application by the same moment, plus a scholarship form and two reference
+    letters. Covers tuition and a living contribution. Two-year regular MSc
+    programmes only, not joint programmes.
 
-- name: Holland Scholarship
-  url: https://www.studyinnl.org/finances/holland-scholarship
+- name: Oxford graduate application (Clarendon consideration)
+  url: https://www.ox.ac.uk/clarendon
+  deadline: 2026-12-01
+  kind: scholarship
+  org: University of Oxford
+  countries: [GB]
+  tags: [masters, phd, verified-2026-08-08]
+  notes: >
+    There is no separate Clarendon application — you are considered
+    automatically if you meet your course's funding deadline, which is early
+    December 2026 or early January 2027 depending on the course. This entry
+    uses the December date because missing it by one day disqualifies you
+    regardless of profile. Check your specific course page.
+
+- name: Gates Cambridge Scholarship
+  url: https://www.gatescambridge.org/apply/timeline/
+  deadline: 2026-12-08
+  kind: scholarship
+  org: University of Cambridge
+  countries: [GB]
+  tags: [masters, phd, fully-funded, verified-2026-08-08]
+  notes: >
+    Main international round is 8 December 2026 or 6 January 2027 by course;
+    this entry uses the earlier. Midnight GMT. Applied for inside the standard
+    Cambridge postgraduate application, not separately. The 14 October 2026
+    round is for US citizens resident in the USA and does not apply to you.
+
+# ---------------------------------------------------------------------------
+# NEW YEAR
+# ---------------------------------------------------------------------------
+
+- name: France Excellence Eiffel Scholarship
+  url: https://www.campusfrance.org/en/france-excellence-eiffel-scholarship-program
+  deadline: 2027-01-08
+  kind: scholarship
+  org: Campus France
+  countries: [FR]
+  tags: [masters, verified-2026-08-08]
+  notes: >
+    You cannot apply directly — only French institutions may submit
+    candidates, so the date that matters to you is each school's internal
+    nomination cut-off, typically weeks to months earlier. Contact target
+    schools in autumn 2026 or this deadline is already unreachable.
+    €1,200/month for master's students.
+
+- name: Swedish master's applications (prerequisite for SISGP)
+  url: https://www.universityadmissions.se/
+  deadline: 2027-01-15
+  kind: scholarship
+  org: Swedish Institute
+  countries: [SE]
+  tags: [masters, fully-funded, prerequisite, verify-date]
+  notes: >
+    The SISGP scholarship portal opens in February, but you must already have
+    applied to Swedish master's programmes through universityadmissions.se by
+    mid-January — miss this and the scholarship deadline is moot. Dates shown
+    follow the 2026/27 cycle (admission 15 Jan, portal 9–25 Feb); the 2027/28
+    dates are usually published in autumn. Confirm Jordan is on the eligible
+    country list, which changes between cycles.
+
+- name: NL Scholarship (formerly Holland Scholarship)
+  url: https://www.studyinnl.org/finances/nl-scholarship
   deadline: 2027-02-01
   kind: scholarship
   org: Dutch Ministry of Education
   countries: [NL]
-  tags: [masters, partial, verify-date]
+  tags: [masters, partial, verified-2026-08-08]
+  notes: >
+    Renamed from Holland Scholarship. €5,000 one-off, not full tuition. Applied
+    for directly at the institution, each of which sets its own deadline —
+    either 1 February or 1 May. This entry uses the earlier; check your chosen
+    university. Non-EEA students only, which you are.
+
+# ---------------------------------------------------------------------------
+# LATER / ROLLING
+# ---------------------------------------------------------------------------
+
+- name: Fulbright Foreign Student Program (Jordan) — window opens
+  url: https://www.fulbright.org.jo/jordanian-programs/jordanian-student-scholarship
+  deadline: 2027-02-01
+  kind: scholarship
+  org: Jordanian-American Commission for Educational Exchange
+  countries: [US]
+  tags: [masters, fully-funded, eligibility-risk, verified-2026-08-08]
+  notes: >
+    Cycle runs 1 February to 30 June (15:00 Jordan time), not March as
+    previously recorded here. Funds up to two years toward a US master's.
+    ELIGIBILITY RISK: the commission requires applicants to reside in Jordan
+    throughout the application and selection process. Confirm with the Amman
+    office whether studying in North Cyprus disqualifies you before spending
+    time on this. Preference for candidates who have not previously lived in
+    the US.
+
+- name: Fulbright Jordan — final deadline
+  url: https://www.fulbright.org.jo/jordanian-programs/jordanian-student-scholarship
+  deadline: 2027-06-30
+  kind: scholarship
+  org: Jordanian-American Commission for Educational Exchange
+  countries: [US]
+  tags: [masters, fully-funded, verified-2026-08-08]
+  notes: Closes 15:00 Jordan time. See the February entry for the eligibility caveat.
+
+- name: EURAXESS / MSCA doctoral positions — sweep
+  url: https://euraxess.ec.europa.eu/jobs
+  deadline: 2027-03-01
+  kind: fellowship
+  org: European Commission
+  countries: [DE, NL, SE, FR, ES, IT, BE, AT, DK, FI]
+  tags: [phd, salaried, rolling, verified-2026-08-08]
+  notes: >
+    Correction to the previous entry: the MSCA Doctoral Networks call
+    (24 November 2026) is for university consortia bidding for funding, not
+    for individual candidates — it is not something you apply to. Funded
+    networks then advertise salaried PhD posts on EURAXESS year-round, which
+    is what you actually watch. The 2026 call funds ~2,115 doctoral posts
+    including a new AI-for-science strand, so recruitment ramps up during
+    2027. Mobility rules generally favour applicants who have not recently
+    lived in the host country.
+
+# ---------------------------------------------------------------------------
+# HIRING CYCLES (reminders, not application deadlines)
+# ---------------------------------------------------------------------------
 
 - name: Big-tech EU summer internship applications open
   url: https://www.google.com/about/careers/applications/students/
@@ -131,11 +228,12 @@
   kind: internship
   org: various
   countries: [GB, DE, NL, IE, CH, PL]
-  tags: [internship, cycle, verify-date]
+  tags: [internship, cycle]
   notes: >
-    Google/Microsoft/Amazon/Bloomberg EU internship and graduate cycles open
-    late Aug–Oct and fill on a rolling basis. Applying in week one materially
-    beats applying in week six.
+    Google, Microsoft, Amazon and Bloomberg open EU internship and graduate
+    cycles late August to October and fill on a rolling basis. Applying in
+    week one materially beats applying in week six. A reminder, not a fixed
+    deadline.
 
 - name: EU graduate-programme season
   url: https://europa.eu/eures/portal/jv-se/home
@@ -143,5 +241,5 @@
   kind: internship
   org: various
   countries: [DE, NL, SE, DK, IE]
-  tags: [new-grad, cycle, verify-date]
-  notes: Reminder to sweep EURES and target-company career pages for graduate schemes.
+  tags: [new-grad, cycle]
+  notes: Prompt to sweep EURES and target-company career pages for graduate schemes.

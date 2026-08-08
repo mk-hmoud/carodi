@@ -34,6 +34,11 @@ sources:
       name: calendar
       file: config/deadlines.yaml
       alerts: [120, 90, 60, 30, 14, 7, 3, 1]
+      # Days of catch-up after a threshold passes, so a missed run (VPS down,
+      # a failed digest) still delivers the alert instead of losing it. The
+      # alert title carries the threshold rather than the exact days left, so
+      # the extra days dedupe to one notification.
+      window: 3
 
   # -- ATS boards ---------------------------------------------------------
   # The highest-signal source available. Add companies you would actually
