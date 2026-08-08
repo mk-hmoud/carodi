@@ -50,8 +50,7 @@ class FakeEnricher(LlmEnricher):
         self.min_interval = 0.0
         self.max_chars = 6000
         self.disable_thinking = True
-        self.extracted = self.cached = self.skipped = self.failed = 0
-        self._last_call = 0.0
+        self._reset_counters()  # shared with the real enricher, so state can't drift
         self._result, self._boom = result, boom
         self.calls = 0
 
@@ -241,3 +240,49 @@ def test_malformed_cached_payload_is_ignored():
     o = opp()
     o.enrichment["llm"] = "not a dict"
     assert rules.score(o)[0] == 0
+
+
+# -- quota handling --------------------------------------------------------
+
+
+def test_the_budget_counts_attempts_not_successes(store):
+    """Regression: the first live run made 65 pointless calls against an
+    already-exhausted quota, because only successes counted toward the cap."""
+    enricher = FakeEnricher(store, boom=RuntimeError("boom"), max_per_run=3)
+    for i in range(10):
+        enricher.enrich(opp(title=f"Backend Engineer {i}"))
+    assert enricher.calls == 3
+
+
+def test_quota_exhaustion_halts_the_stage_for_the_rest_of_the_run(store):
+    enricher = FakeEnricher(
+        store, boom=RuntimeError("429 RESOURCE_EXHAUSTED: quota exceeded"), max_per_run=40
+    )
+    for i in range(10):
+        enricher.enrich(opp(title=f"Backend Engineer {i}"))
+
+    assert enricher.calls == 1, "kept calling after the provider said stop"
+    assert enricher.halted == "quota exhausted"
+    assert enricher.stats()["halted"] == "quota exhausted"
+
+
+def test_an_ordinary_failure_does_not_halt_the_stage(store):
+    enricher = FakeEnricher(store, boom=RuntimeError("connection reset"), max_per_run=40)
+    for i in range(3):
+        enricher.enrich(opp(title=f"Backend Engineer {i}"))
+    assert enricher.calls == 3
+    assert enricher.halted is None
+
+
+def test_cached_items_still_resolve_after_a_halt(store):
+    """A halt must not blind the run to work already paid for."""
+    warm = FakeEnricher(store, result=extraction(sponsorship=Sponsorship.OFFERED))
+    known = opp(title="Backend Engineer known")
+    warm.enrich(known)
+
+    halted = FakeEnricher(store, boom=RuntimeError("429 RESOURCE_EXHAUSTED"))
+    halted.enrich(opp(title="Backend Engineer new"))  # trips the halt
+    fresh = opp(title="Backend Engineer known")
+    halted.enrich(fresh)
+
+    assert fresh.enrichment["llm"]["sponsorship"] == "offered"

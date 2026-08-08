@@ -35,6 +35,16 @@ from carodi.store import Store
 
 log = logging.getLogger(__name__)
 
+#: Substrings that mark "you are out of quota" rather than a transient fault.
+#: Matched on the exception text because the SDK raises one ClientError type
+#: for every 4xx, so the status code alone does not distinguish them.
+_QUOTA_MARKERS = ("RESOURCE_EXHAUSTED", "429", "quota")
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    text = str(exc)
+    return any(marker in text for marker in _QUOTA_MARKERS)
+
 
 class Sponsorship(str, Enum):
     """Modelled as three states, not a bool.
@@ -137,10 +147,18 @@ class LlmEnricher:
         self.max_chars = max_chars
         self.disable_thinking = disable_thinking
 
+        self._reset_counters()
+
+    def _reset_counters(self) -> None:
+        """Run-scoped state, in one place so test doubles cannot drift from it."""
         self.extracted = 0
         self.cached = 0
         self.skipped = 0
         self.failed = 0
+        # Set when the provider says we are out of quota. Once that happens
+        # every further call is guaranteed to fail, so the stage stops for the
+        # rest of the run rather than grinding through the remaining postings.
+        self.halted: str | None = None
         self._last_call = 0.0
 
     # -- request ---------------------------------------------------------------
@@ -215,19 +233,36 @@ class LlmEnricher:
             self.cached += 1
             return
 
+        if self.halted:
+            self.skipped += 1
+            return
+
         if not opp.description or len(opp.description) < 200:
             self.skipped += 1
             return
 
-        if self.extracted >= self.max_per_run:
+        # Budget counts attempts, not successes. Counting only successes lets a
+        # run that is failing every call make unbounded requests -- which is
+        # exactly what happened the first time this ran: 15 extracted, 65 failed,
+        # all 65 of them pointless calls against an already-exhausted quota.
+        if self.extracted + self.failed >= self.max_per_run:
             self.skipped += 1
             return
 
         try:
             extraction = self.extract(opp)
         except Exception as exc:  # noqa: BLE001 - degrade, never crash the run
-            log.warning("extraction failed for %s: %s", opp.fingerprint, exc)
             self.failed += 1
+            if _is_quota_error(exc):
+                self.halted = "quota exhausted"
+                log.warning(
+                    "LLM quota exhausted after %d extraction(s); skipping the rest "
+                    "of this run. Cached results are kept, so the next run resumes "
+                    "where this one stopped.",
+                    self.extracted,
+                )
+            else:
+                log.warning("extraction failed for %s: %s", opp.fingerprint, exc)
             return
 
         if extraction is None:
@@ -240,9 +275,12 @@ class LlmEnricher:
         self.extracted += 1
 
     def stats(self) -> dict:
-        return {
+        stats = {
             "extracted": self.extracted,
             "cached": self.cached,
             "skipped": self.skipped,
             "failed": self.failed,
         }
+        if self.halted:
+            stats["halted"] = self.halted
+        return stats
