@@ -8,7 +8,6 @@ dependencies = [
     "pydantic>=2.7",
     "pyyaml>=6.0",
     "feedparser>=6.0",
-    "selectolax>=0.3.21",
     "rapidfuzz>=3.9",
 ]
 
