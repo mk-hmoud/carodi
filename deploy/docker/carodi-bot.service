@@ -1,0 +1,23 @@
+[Unit]
+Description=carodi triage bot (docker)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Long-running, unlike carodi.service which is a oneshot driven by the timer.
+Type=simple
+WorkingDirectory=%h/repos/carodi
+
+Environment=CARODI_UID=%U
+Environment=CARODI_GID=%G
+
+# --name so a restart replaces the container instead of accumulating them.
+ExecStartPre=-/usr/bin/docker rm -f carodi-bot
+ExecStart=/usr/bin/docker compose run --rm -T --name carodi-bot carodi bot
+ExecStop=-/usr/bin/docker stop carodi-bot
+
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

@@ -119,7 +119,23 @@ per match, which is how you learn to mute a bot.
 The known way this project dies is that it delivers forty excellent matches a
 day and you apply to none of them. Discovery is rarely the real bottleneck.
 
-Every digest entry carries a fingerprint. Record what you did:
+So every digest ends with a **Triage** button. Tapping it opens one match at a
+time — title, employer, sponsor status, a link straight to the posting — with
+**Applied**, **Not for me** and **Later**. Each tap edits the same message in
+place, so triaging twenty matches costs one notification rather than twenty.
+
+That needs the bot running to receive taps:
+
+```bash
+carodi bot            # long-polls for button presses; runs until stopped
+carodi bot --once     # drain whatever is pending and exit
+```
+
+Deployed as `carodi-bot.service` alongside the timer (see below). Actions are
+keyed by fingerprint rather than list position, so a button on yesterday's card
+can never resolve whatever now happens to sit at that index.
+
+The terminal is still there if you prefer it:
 
 ```bash
 carodi open                              # delivered, still undecided
@@ -176,12 +192,19 @@ printf 'CARODI_TELEGRAM_TOKEN=...\nCARODI_TELEGRAM_CHAT_ID=...\n' > .env
 chmod 600 .env
 
 mkdir -p ~/.config/systemd/user
-cp deploy/docker/carodi.{service,timer} ~/.config/systemd/user/
+cp deploy/docker/carodi.service deploy/docker/carodi.timer \
+   deploy/docker/carodi-bot.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now carodi.timer
+
+systemctl --user enable --now carodi.timer        # the daily digest
+systemctl --user enable --now carodi-bot.service  # the Triage buttons
 
 loginctl enable-linger "$USER"     # fire even when you're not logged in
 ```
+
+Two units, different shapes: `carodi.timer` fires a oneshot run each morning,
+while `carodi-bot.service` stays up to receive button taps and restarts on
+failure. The digest works without the bot — you just get no buttons.
 
 Update with `git pull` — the unit rebuilds before each run, so code changes
 take effect on the next digest with no extra step.

@@ -88,17 +88,27 @@ class TelegramSink(Sink):
 
     def deliver(self, items: list[Opportunity], accountability: dict, errors: dict) -> None:
         text = self.render(items, accountability, errors)
+        chunks = self._chunks(text)
+
         with httpx.Client(timeout=30.0) as client:
-            for chunk in self._chunks(text):
-                r = client.post(
-                    API.format(token=self.token),
-                    json={
-                        "chat_id": self.chat_id,
-                        "text": chunk,
-                        "parse_mode": "HTML",
-                        "disable_web_page_preview": self.disable_preview,
-                    },
-                )
+            for i, chunk in enumerate(chunks):
+                payload = {
+                    "chat_id": self.chat_id,
+                    "text": chunk,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": self.disable_preview,
+                }
+                # Only the final chunk carries the button, so a digest split
+                # across three messages does not offer three Triage buttons.
+                if items and i == len(chunks) - 1:
+                    pending = accountability.get("undecided", 0) + len(items)
+                    payload["reply_markup"] = {
+                        "inline_keyboard": [
+                            [{"text": f"🗂 Triage ({pending})", "callback_data": "tri"}]
+                        ]
+                    }
+
+                r = client.post(API.format(token=self.token), json=payload)
                 if r.status_code >= 400:
                     log.error("telegram rejected message: %s %s", r.status_code, r.text[:300])
                     r.raise_for_status()

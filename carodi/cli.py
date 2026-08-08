@@ -91,6 +91,26 @@ def cmd_sources(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bot(args: argparse.Namespace) -> int:
+    """Long-poll for button taps from the digest. Runs until stopped."""
+    from carodi.bot import Bot
+
+    config = Config.load(args.config)
+    bot = Bot(
+        token=os.environ.get("CARODI_TELEGRAM_TOKEN", ""),
+        chat_id=os.environ.get("CARODI_TELEGRAM_CHAT_ID", ""),
+        db_path=config.db_path,
+        poll_timeout=args.poll_timeout,
+    )
+    if args.once:
+        with Store(config.db_path) as store:
+            print(f"handled {bot.poll_once(store)} update(s)")
+        return 0
+
+    bot.run_forever()
+    return 0
+
+
 def cmd_registers(args: argparse.Namespace) -> int:
     """Report sponsor-register health.
 
@@ -198,13 +218,13 @@ def cmd_status(args: argparse.Namespace) -> int:
 def cmd_open(args: argparse.Namespace) -> int:
     config = Config.load(args.config)
     with Store(config.db_path) as store:
-        rows = store.open_items(limit=args.limit)
-        if not rows:
+        pending = store.undecided(limit=args.limit)
+        if not pending:
             print("nothing undecided — inbox zero")
-        for row in rows:
-            print(f"  [{row['score']:g}] {row['fingerprint']}  {row['title']}")
-            print(f"        {row['org']} · {row['location_raw']}")
-            print(f"        {row['url']}")
+        for opp in pending:
+            print(f"  [{opp.score:g}] {opp.fingerprint}  {opp.title}")
+            print(f"        {opp.org} · {opp.location_raw}")
+            print(f"        {opp.url}")
         stats = store.accountability()
         print(
             f"\nLast {stats['days']}d: {stats['delivered']} delivered · "
@@ -228,6 +248,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_sources = sub.add_parser("sources", help="list source types and configured instances")
     p_sources.set_defaults(func=cmd_sources)
+
+    p_bot = sub.add_parser("bot", help="handle Applied/Skipped taps from the digest")
+    p_bot.add_argument("--once", action="store_true", help="drain pending updates and exit")
+    p_bot.add_argument("--poll-timeout", type=int, default=50, help="long-poll seconds")
+    p_bot.set_defaults(func=cmd_bot)
 
     p_reg = sub.add_parser("registers", help="check sponsor register health")
     p_reg.add_argument("--probe", nargs="*", default=[], help="test employer names against them")

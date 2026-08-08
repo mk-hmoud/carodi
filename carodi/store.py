@@ -196,10 +196,23 @@ class Store:
         ).fetchone()
         return {"days": days, **{k: row[k] for k in row.keys()}}
 
-    def open_items(self, limit: int = 50) -> list[sqlite3.Row]:
-        """Delivered but not yet acted on."""
-        return self.conn.execute(
+    def undecided(self, limit: int = 50) -> list[Opportunity]:
+        """Delivered but not yet acted on, best first.
+
+        Ordering must be stable between calls: the triage flow navigates by
+        position in this list, so a reshuffle mid-session would jump you
+        around. Score then notified_at then fingerprint is fully determined.
+        """
+        rows = self.conn.execute(
             "SELECT * FROM opportunities WHERE status = 'notified' "
-            "ORDER BY score DESC, notified_at DESC LIMIT ?",
+            "ORDER BY score DESC, notified_at DESC, fingerprint ASC LIMIT ?",
             (limit,),
         ).fetchall()
+        return [to_opportunity(r) for r in rows]
+
+    def count_undecided(self) -> int:
+        return int(
+            self.conn.execute(
+                "SELECT COUNT(*) FROM opportunities WHERE status = 'notified'"
+            ).fetchone()[0]
+        )
