@@ -54,7 +54,11 @@ def cmd_run(args: argparse.Namespace) -> int:
             for reason, count in result.rejections.most_common(20):
                 print(f"  {count:5d}  {reason}", file=sys.stderr)
 
-        items = result.new[: args.limit or config.digest_limit]
+        limit = args.limit or config.digest_limit
+        # A dry run persists nothing, so the store has nothing to read back;
+        # a real run must send everything still undelivered, not merely what
+        # this run happened to discover.
+        items = result.new[:limit] if args.dry_run else store.undelivered(limit)
         sink.deliver(items, store.accountability(), result.source_errors)
 
         if not args.dry_run:

@@ -11,10 +11,32 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from carodi.models import Opportunity
+from carodi.models import Kind, Opportunity, Remote
+
+
+def to_opportunity(row: sqlite3.Row) -> Opportunity:
+    """Rebuild an Opportunity from a stored row.
+
+    The fingerprint is derived from org, title and location rather than stored,
+    and all three round-trip, so the rebuilt record identifies the same row.
+    """
+    return Opportunity(
+        source=row["source"],
+        kind=Kind(row["kind"]),
+        title=row["title"],
+        org=row["org"],
+        url=row["url"],
+        location_raw=row["location_raw"] or "",
+        countries=json.loads(row["countries"] or "[]"),
+        remote=Remote(row["remote"]),
+        deadline=date.fromisoformat(row["deadline"]) if row["deadline"] else None,
+        score=row["score"] or 0.0,
+        reasons=json.loads(row["reasons"] or "[]"),
+        enrichment=json.loads(row["enrichment"] or "{}"),
+    )
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS opportunities (
@@ -144,12 +166,21 @@ class Store:
 
     # -- reading --------------------------------------------------------------
 
-    def undelivered(self, limit: int = 25) -> list[sqlite3.Row]:
-        return self.conn.execute(
+    def undelivered(self, limit: int = 25) -> list[Opportunity]:
+        """Everything stored but never sent, best first.
+
+        The digest must be built from this rather than from "what the funnel
+        found this run". If a run stores matches and then fails before
+        delivering -- a missing token, a Telegram outage, a killed process --
+        those rows keep notified_at NULL but stop being newly-seen, so keying
+        the digest off novelty would strand them forever.
+        """
+        rows = self.conn.execute(
             "SELECT * FROM opportunities WHERE notified_at IS NULL "
             "ORDER BY score DESC, first_seen DESC LIMIT ?",
             (limit,),
         ).fetchall()
+        return [to_opportunity(r) for r in rows]
 
     def accountability(self, days: int = 30) -> dict:
         """The uncomfortable numbers that go in the digest footer."""

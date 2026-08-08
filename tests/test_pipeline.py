@@ -523,3 +523,58 @@ def test_accountability_counts_applications(tmp_path):
         assert stats["delivered"] == 2
         assert stats["applied"] == 1
         assert stats["undecided"] == 1
+
+
+def test_matches_stranded_by_a_failed_delivery_are_resent(tmp_path):
+    """Regression: the digest was built from "found this run" rather than
+    "never delivered", so a run that stored matches and then failed to send
+    them (missing token, Telegram outage) stranded them permanently."""
+    with Store(tmp_path / "t.db") as store:
+        stranded = opp(title="Backend Engineer", org="Monzo")
+        assert store.upsert(stranded) is True
+        store.commit()
+        # ...delivery raises here, so mark_notified is never reached.
+
+        # Next run rediscovers it: no longer new, but still undelivered.
+        assert store.upsert(stranded) is False
+        store.commit()
+
+        pending = store.undelivered()
+        assert [o.fingerprint for o in pending] == [stranded.fingerprint]
+
+
+def test_undelivered_round_trips_every_field_the_digest_renders(tmp_path):
+    with Store(tmp_path / "t.db") as store:
+        original = opp(
+            kind=Kind.INTERNSHIP,
+            title="Software Engineer Intern",
+            org="Cloudflare",
+            location_raw="Austin, TX",
+            countries=["US"],
+            remote=Remote.HYBRID,
+            deadline=date(2026, 11, 4),
+        )
+        original.score = 17.0
+        original.reasons = ["+5 internship"]
+        original.enrichment = {"sponsor_relevant": ["GB"], "sponsor_uncertain": []}
+        store.upsert(original)
+        store.commit()
+
+        [restored] = store.undelivered()
+        assert restored.fingerprint == original.fingerprint
+        assert restored.kind is Kind.INTERNSHIP
+        assert restored.remote is Remote.HYBRID
+        assert restored.countries == ["US"]
+        assert restored.deadline == date(2026, 11, 4)
+        assert restored.score == 17.0
+        assert restored.reasons == ["+5 internship"]
+        assert restored.enrichment["sponsor_relevant"] == ["GB"]
+
+
+def test_delivered_items_are_not_resent(tmp_path):
+    with Store(tmp_path / "t.db") as store:
+        o = opp()
+        store.upsert(o)
+        store.commit()
+        store.mark_notified([o.fingerprint])
+        assert store.undelivered() == []
