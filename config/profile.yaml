@@ -23,17 +23,15 @@ target_countries: [
   "PL", "CZ", "SK", "SI", "HR", "HU", "RO", "BG", "EE", "LV", "LT",
   # North America
   "US", "CA",
+  # Türkiye -- recognises TRNC degrees, and Jordanians have straightforward
+  # work access. On paper the most reachable destination on this list.
+  "TR",
+  # Gulf -- hires Jordanians readily, no lottery, no degree-recognition
+  # question. Employment visas are employer-sponsored as a matter of course.
+  "AE", "SA", "QA", "KW", "BH",
+  # Asia-Pacific -- points-based or employer-led skilled routes.
+  "AU", "NZ", "SG", "JP", "KR",
 ]
-
-# Beyond the EU/UK/US brief, so left out deliberately -- but worth a look:
-#   "TR"                     Türkiye recognises TRNC degrees, and Jordanians
-#                            have straightforward work access. On paper this is
-#                            your highest-probability destination, even though
-#                            it is not what you asked for.
-#   "AE","SA","QA","KW","BH" Gulf states hire Jordanians readily, with no
-#                            lottery and no degree-recognition question.
-#   "AU","NZ","SG","JP","KR" Points-based or employer-led skilled routes.
-# Add any of these to the list above and give them a weight below.
 
 remote:
   accept: true
@@ -201,6 +199,21 @@ scoring:
     # Dutch job at a verified sponsor.
     US: 1
     CA: 2
+    # Outside the original EU/UK/US brief, so weighted mid-range: genuinely
+    # reachable, but not the stated goal. These are guesses about your
+    # preference rather than facts about the countries -- if you would take
+    # Dubai over Warsaw, or vice versa, say so and these should move.
+    TR: 3
+    AE: 3
+    SA: 2
+    QA: 2
+    KW: 2
+    BH: 2
+    AU: 3
+    NZ: 2
+    SG: 3
+    JP: 3
+    KR: 2
 
   # A remote role restricted to countries weighted below this is treated as
   # geographically closed. At floor 2, "remote (US only)" is penalised while

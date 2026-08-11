@@ -45,8 +45,10 @@ COUNTRY_HINTS: dict[str, tuple[str, ...]] = {
     "AE": ("uae", "united arab emirates", "dubai", "abu dhabi"),
     "JO": ("jordan", "amman"),
     "CY": ("cyprus", "nicosia", "lefkosa", "lefkoşa", "limassol", "larnaca", "famagusta"),
-    # Not targets, but recognizing them matters: an unrecognized location
-    # otherwise falls through to a description scan and can be mislabelled.
+    # Some of the below are targets (JP, KR, SG, AU, NZ, SA, QA, KW, BH); the
+    # rest are not. Both belong here: a location this table cannot recognize
+    # falls through to a description scan and can be mislabelled entirely, so
+    # knowing a place exists matters even when you would never move there.
     "CN": ("china", "beijing", "shanghai", "shenzhen", "hangzhou", "guangzhou"),
     "IN": ("india", "bengaluru", "bangalore", "hyderabad", "mumbai", "pune", "gurgaon",
            "gurugram", "chennai", "delhi", "noida"),
@@ -63,7 +65,10 @@ COUNTRY_HINTS: dict[str, tuple[str, ...]] = {
     "NG": ("nigeria", "lagos", "abuja"),
     "KE": ("kenya", "nairobi"),
     "EG": ("egypt", "cairo", "alexandria"),
-    "SA": ("saudi arabia", "riyadh", "jeddah"),
+    "SA": ("saudi arabia", "riyadh", "jeddah", "dammam", "neom"),
+    "QA": ("qatar", "doha"),
+    "KW": ("kuwait",),
+    "BH": ("bahrain", "manama"),
     "UA": ("ukraine", "kyiv", "kiev", "lviv"),
     "RO": ("romania", "bucharest", "cluj", "cluj napoca", "iasi", "timisoara"),
     "BG": ("bulgaria", "sofia", "plovdiv"),
