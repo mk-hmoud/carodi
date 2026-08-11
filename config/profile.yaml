@@ -7,10 +7,33 @@ identity:
   based_in: CY
   graduating: 2027-06        # ~1 year out; internships and new-grad roles are in scope
 
-# Onsite roles outside this list are rejected outright.
+# Onsite roles outside this list are rejected outright; everything on it is
+# ranked by scoring.country_bonus below. Membership answers "should I ever see
+# this?", the weight answers "how much should I care?" -- so somewhere hard to
+# reach belongs on the list at a low weight, not off it.
 # Quoted because YAML 1.1 parses bare NO (Norway) as boolean false.
-target_countries: ["GB", "IE", "DE", "NL", "SE", "DK", "NO", "FI", "CH", "AT", "BE",
-                   "FR", "ES", "PT", "IT", "PL", "CZ", "EE", "LU", "US", "CA"]
+target_countries: [
+  # UK + Ireland
+  "GB", "IE",
+  # Western / Northern Europe
+  "DE", "NL", "SE", "DK", "NO", "FI", "IS", "CH", "AT", "BE", "LU", "FR",
+  # Southern Europe
+  "ES", "PT", "IT", "GR", "MT", "CY",
+  # Central / Eastern Europe
+  "PL", "CZ", "SK", "SI", "HR", "HU", "RO", "BG", "EE", "LV", "LT",
+  # North America
+  "US", "CA",
+]
+
+# Beyond the EU/UK/US brief, so left out deliberately -- but worth a look:
+#   "TR"                     Türkiye recognises TRNC degrees, and Jordanians
+#                            have straightforward work access. On paper this is
+#                            your highest-probability destination, even though
+#                            it is not what you asked for.
+#   "AE","SA","QA","KW","BH" Gulf states hire Jordanians readily, with no
+#                            lottery and no degree-recognition question.
+#   "AU","NZ","SG","JP","KR" Points-based or employer-led skilled routes.
+# Add any of these to the list above and give them a weight below.
 
 remote:
   accept: true
@@ -127,5 +150,71 @@ keywords:
 
 scoring:
   threshold: 6             # raise this when the digest gets noisy
-  target_country_bonus: 3
+
+  target_country_bonus: 3  # weight for any target country not named below
+
+  # Tiered by how reachable the country actually is, not by how much you like
+  # it. Tier 1 is where eligibility is *checkable* -- both publish a public
+  # register of licensed sponsors, so carodi can verify a specific employer can
+  # hire you rather than guessing.
+  country_bonus:
+    GB: 6
+    NL: 6
+    # Clear employer-led routes: Ireland's Critical Skills permit, Germany's
+    # EU Blue Card.
+    IE: 5
+    DE: 5
+    # Strong tech markets with workable skilled-migration routes.
+    SE: 4
+    DK: 4
+    FI: 4
+    "NO": 4
+    CH: 4
+    AT: 4
+    BE: 4
+    LU: 4
+    FR: 4
+    ES: 4
+    PT: 4
+    # Smaller or tougher markets, still genuinely reachable.
+    IT: 3
+    PL: 3
+    CZ: 3
+    EE: 3
+    LT: 3
+    LV: 3
+    SK: 3
+    SI: 3
+    HR: 3
+    HU: 3
+    RO: 3
+    BG: 3
+    GR: 3
+    MT: 3
+    IS: 3
+    # Republic of Cyprus -- EU, and you are already on the island. Note this is
+    # not the TRNC: crossing means an EU work permit like anywhere else.
+    CY: 3
+    # In scope but bottom-ranked. No sponsor register to check against, and the
+    # H-1B is a lottery you cannot plan around. Kept visible because a good
+    # enough US role is still worth seeing -- it just should not outrank a
+    # Dutch job at a verified sponsor.
+    US: 1
+    CA: 2
+
+  # A remote role restricted to countries weighted below this is treated as
+  # geographically closed. At floor 2, "remote (US only)" is penalised while
+  # "remote (UK)" is not -- which is the whole point of weighting US at 1.
+  remote_restriction_floor: 2
+
   sponsor_bonus: 5
+
+  # Facts read out of the posting text by the LLM stage. Score adjustments
+  # only -- never rejections. See carodi/enrich_llm.py.
+  llm:
+    sponsorship_offered: 8
+    sponsorship_denied: -12
+    entry_level: 4
+    per_excess_year: -1.5
+    years_allowed: 2
+    remote_excluded: -8

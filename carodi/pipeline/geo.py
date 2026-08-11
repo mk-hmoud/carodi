@@ -35,6 +35,8 @@ COUNTRY_HINTS: dict[str, tuple[str, ...]] = {
     "CZ": ("czech", "prague", "praha", "brno"),
     "EE": ("estonia", "tallinn", "tartu"),
     "LU": ("luxembourg",),
+    "IS": ("iceland", "reykjavik", "reykjavík"),
+    "MT": ("malta", "valletta", "sliema"),
     "US": ("united states", "usa", "u.s.", "new york", "san francisco", "seattle", "austin",
            "boston", "chicago", "denver", "los angeles", "california", "texas", "remote us",
            "us remote", "nyc", "bay area"),

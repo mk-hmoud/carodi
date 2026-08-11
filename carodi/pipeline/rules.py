@@ -46,6 +46,24 @@ def country_codes(values: list, field: str) -> set[str]:
     return codes
 
 
+def country_weights(mapping: dict | None, field: str) -> dict[str, float]:
+    """Validate a country -> weight map from YAML.
+
+    Same YAML 1.1 trap as country_codes, but on the key side, where it is
+    easier to miss: a bare `NO: 4` key becomes the boolean False, so Norway
+    silently drops to the default weight with nothing to show for it.
+    """
+    weights: dict[str, float] = {}
+    for key, value in (mapping or {}).items():
+        if isinstance(key, bool):
+            raise ValueError(
+                f"{field}: got boolean {key!r} as a country key. "
+                'YAML reads bare NO/ON/OFF as booleans — quote them, e.g. "NO": 4.'
+            )
+        weights[str(key).upper()] = float(value)
+    return weights
+
+
 class Rules:
     def __init__(self, profile: dict):
         self.profile = profile
@@ -77,8 +95,18 @@ class Rules:
 
         scoring = profile.get("scoring", {})
         self.threshold = float(scoring.get("threshold", 4))
-        self.country_bonus = float(scoring.get("target_country_bonus", 3))
         self.sponsor_bonus = float(scoring.get("sponsor_bonus", 5))
+
+        # Being a target country is not one thing. A role in a country with a
+        # public sponsor register, where eligibility is checkable, is worth more
+        # than one behind a visa lottery -- but both belong in scope. Per-country
+        # weights say "show me, rank low" instead of forcing include-or-exclude.
+        self.country_bonus_default = float(scoring.get("target_country_bonus", 3))
+        self.country_bonus = country_weights(scoring.get("country_bonus"), "scoring.country_bonus")
+        # A remote role restricted to countries you barely value is nearly as
+        # useless as one restricted somewhere you don't want at all, so the
+        # penalty keys off the weight rather than off bare target membership.
+        self.remote_restriction_floor = float(scoring.get("remote_restriction_floor", 2))
 
         # Weights for facts read out of the posting by the LLM stage. All are
         # score adjustments, never rejections -- see carodi/enrich_llm.py for
@@ -154,6 +182,22 @@ class Rules:
 
     # -- soft ranking ---------------------------------------------------------
 
+    def country_weight(self, codes) -> tuple[float, str | None]:
+        """Best per-country weight among `codes`, and which country earned it.
+
+        Returns (0.0, None) when none of the codes are in scope at all -- which
+        is different from (0.0, "US"), meaning in scope but deliberately valued
+        at nothing.
+        """
+        best: float | None = None
+        where: str | None = None
+        for code in sorted(set(codes) & self.targets):
+            weight = self.country_bonus.get(code, self.country_bonus_default)
+            if best is None or weight > best:
+                best, where = weight, code
+        return (best or 0.0), where
+
+
     def score(self, opp: Opportunity) -> tuple[float, list[str]]:
         hay = opp.haystack()
         score = 0.0
@@ -175,9 +219,13 @@ class Rules:
             score += self.sponsor_bonus
             reasons.append(f"+{self.sponsor_bonus:g} sponsor register: {', '.join(sponsors)}")
 
-        if hit := self.targets & set(opp.countries):
-            score += self.country_bonus
-            reasons.append(f"+{self.country_bonus:g} target country: {', '.join(sorted(hit))}")
+        weight, where = self.country_weight(opp.countries)
+        if where is not None:
+            score += weight
+            # Surfaced even at zero: it explains why an in-scope role still
+            # scores nothing for its location, rather than looking like a bug.
+            note = f"+{weight:g} {where}" if weight else f"+0 {where} (in scope, unweighted)"
+            reasons.append(note)
 
         if opp.kind is Kind.INTERNSHIP and not matches(hay, "internship"):
             score += 1
@@ -230,7 +278,8 @@ class Rules:
         restricted = facts.get("remote_restricted_to")
         if isinstance(restricted, list) and restricted:
             allowed = {c.upper() for c in restricted}
-            if not (allowed & self.targets):
+            weight, _ = self.country_weight(allowed)
+            if weight < self.remote_restriction_floor:
                 score += self.llm_remote_excluded
                 reasons.append(
                     f"{self.llm_remote_excluded:+g} remote limited to {', '.join(sorted(allowed))}"

@@ -604,3 +604,99 @@ def test_delivered_items_are_not_resent(tmp_path):
         store.commit()
         store.mark_notified([o.fingerprint])
         assert store.undelivered() == []
+
+
+# -- per-country weighting -------------------------------------------------
+
+WEIGHTED = {
+    **PROFILE,
+    "target_countries": ["GB", "NL", "US", "PL"],
+    "scoring": {
+        "threshold": 6,
+        "target_country_bonus": 3,
+        "country_bonus": {"GB": 6, "NL": 6, "US": 1},
+        "remote_restriction_floor": 2,
+        "sponsor_bonus": 5,
+    },
+}
+
+
+def test_country_weight_picks_the_best_match():
+    rules = Rules(WEIGHTED)
+    assert rules.country_weight(["US", "GB"]) == (6.0, "GB")
+
+
+def test_unlisted_target_country_falls_back_to_the_default():
+    rules = Rules(WEIGHTED)
+    assert rules.country_weight(["PL"]) == (3.0, "PL")
+
+
+def test_out_of_scope_country_is_distinguishable_from_a_zero_weight():
+    """(0, None) means 'not in scope'; (0, 'XX') means 'in scope, worth nothing'."""
+    rules = Rules({**WEIGHTED, "scoring": {**WEIGHTED["scoring"],
+                                           "country_bonus": {"US": 0}}})
+    assert rules.country_weight(["JP"]) == (0.0, None)
+    assert rules.country_weight(["US"]) == (0.0, "US")
+
+
+def test_a_low_weighted_country_still_passes_the_hard_filter():
+    """Weighting is ranking, not eligibility -- US must stay visible."""
+    rules = Rules(WEIGHTED)
+    o = opp(location_raw="Austin, Texas", description="Backend role.")
+    geo.annotate(o)
+    assert rules.reject(o) is None
+
+
+def test_a_low_weighted_country_scores_below_a_high_weighted_one():
+    rules = Rules(WEIGHTED)
+    us, gb = opp(location_raw="Austin, Texas"), opp(location_raw="London, UK")
+    for o in (us, gb):
+        geo.annotate(o)
+        o.enrichment["sponsor_countries"] = list(set(o.countries))
+    assert rules.score(gb)[0] > rules.score(us)[0]
+
+
+def test_remote_restricted_to_a_weak_country_is_penalised():
+    """The 21 US-only remote roles the LLM found were previously unpenalised
+    because US was simply 'a target country'."""
+    rules = Rules(WEIGHTED)
+    o = opp()
+    o.enrichment["llm"] = {"sponsorship": "unmentioned", "is_entry_level": False,
+                           "remote_restricted_to": ["US"], "one_line_fit": ""}
+    score, reasons = rules.score(o)
+    assert score < 0
+    assert any("remote limited to US" in r for r in reasons)
+
+
+def test_remote_restricted_to_a_strong_country_is_not_penalised():
+    rules = Rules(WEIGHTED)
+    o = opp()
+    o.enrichment["llm"] = {"sponsorship": "unmentioned", "is_entry_level": False,
+                           "remote_restricted_to": ["GB"], "one_line_fit": ""}
+    assert not any("remote limited" in r for r in rules.score(o)[1])
+
+
+def test_a_boolean_country_key_is_rejected_with_a_clear_message():
+    """Regression: `NO: 4` in YAML becomes the boolean False, and Norway
+    silently fell back to the default weight."""
+    with pytest.raises(ValueError, match="boolean"):
+        Rules({**WEIGHTED, "scoring": {"country_bonus": {False: 4}}})
+
+
+def test_every_target_country_is_actually_detectable():
+    """A target country with no geo hint can never be matched, so the entry is
+    inert -- it silently narrows the funnel instead of widening it."""
+    import yaml
+
+    from carodi.pipeline.geo import COUNTRY_HINTS
+
+    profile = yaml.safe_load((Path(__file__).parent.parent / "config/profile.yaml").read_text())
+    missing = [c for c in profile["target_countries"] if c not in COUNTRY_HINTS]
+    assert not missing, f"target countries with no detection hints: {missing}"
+
+
+@pytest.mark.parametrize(
+    "location,expected", [("Valletta, Malta", "MT"), ("Reykjavik", "IS"), ("Athens", "GR")]
+)
+def test_newly_added_countries_are_detected(location, expected):
+    assert expected in geo.detect_countries(location)
