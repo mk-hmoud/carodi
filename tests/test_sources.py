@@ -5,7 +5,7 @@ import pytest
 from carodi.models import Kind
 from carodi.sources.ats import guess_kind, guess_remote, strip_html
 from carodi.sources.feeds import HnWhoIsHiring
-from carodi.sources.gov import GovJson, JobTech
+from carodi.sources.gov import Arbeitsagentur, GovJson, JobTech
 
 
 @pytest.mark.parametrize(
@@ -171,3 +171,71 @@ def test_gov_json_stamps_a_fixed_country():
     src._get_json = lambda *a, **k: []          # unused; fetch() uses the client
     assert src.country == "Germany"
     assert src.fields["title"] == "titel"
+
+
+class _FakeAgentur(Arbeitsagentur):
+    def __init__(self, jobs, **kw):
+        super().__init__(**kw)
+        self._jobs = jobs
+
+    def _get_json(self, url, **kwargs):
+        return {"ergebnisliste": self._jobs}
+
+
+def _de_job(ref="11949-1", land="DEUTSCHLAND", ort="Berlin", title="Softwareentwickler/in"):
+    return {
+        "referenznummer": ref,
+        "stellenangebotsTitel": title,
+        "firma": "ACME GmbH",
+        "stellenlokationen": [{"adresse": {"ort": ort, "land": land}}],
+        "datumErsteVeroeffentlichung": "2026-08-11",
+        "homeofficemoeglich": False,
+        "alleBerufe": ["Softwareentwickler/in"],
+    }
+
+
+def test_arbeitsagentur_reads_v6_field_names():
+    """v6 renamed the fields the v4-era docs describe: referenznummer not refnr,
+    firma not arbeitgeber. Reading the old names silently yields nothing."""
+    [opp] = list(_FakeAgentur([_de_job()], queries=["x"]).fetch())
+    assert opp.title == "Softwareentwickler/in"
+    assert opp.org == "ACME GmbH"
+
+
+def test_arbeitsagentur_does_not_assume_germany():
+    """The agency is EURES-connected and returns cross-border vacancies -- a
+    German-language search comes back full of Austrian listings."""
+    [opp] = list(_FakeAgentur([_de_job(land="OESTERREICH", ort="Graz")], queries=["x"]).fetch())
+    assert opp.location_raw == "Graz, Austria"
+
+    from carodi.pipeline import geo
+
+    geo.annotate(opp)
+    assert opp.countries == ["AT"]
+
+
+def test_arbeitsagentur_defaults_to_germany_when_unstated():
+    job = _de_job()
+    job["stellenlokationen"] = [{"adresse": {"ort": "Berlin"}}]
+    [opp] = list(_FakeAgentur([job], queries=["x"]).fetch())
+    assert opp.location_raw == "Berlin, Germany"
+
+
+def test_arbeitsagentur_strips_district_suffixes():
+    [opp] = list(_FakeAgentur([_de_job(ort="Graz,07.Bez.:Liebenau",
+                                       land="OESTERREICH")], queries=["x"]).fetch())
+    assert opp.location_raw == "Graz, Austria"
+
+
+def test_arbeitsagentur_prefers_the_employer_url():
+    job = _de_job()
+    job["externeURL"] = "https://jobs.example.at/1"
+    [opp] = list(_FakeAgentur([job], queries=["x"]).fetch())
+    assert str(opp.url) == "https://jobs.example.at/1"
+
+
+def test_arbeitsagentur_uses_the_homeoffice_flag():
+    job = _de_job()
+    job["homeofficemoeglich"] = True
+    [opp] = list(_FakeAgentur([job], queries=["x"]).fetch())
+    assert str(opp.remote) == "hybrid"

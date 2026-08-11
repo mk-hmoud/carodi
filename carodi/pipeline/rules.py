@@ -108,6 +108,14 @@ class Rules:
         # penalty keys off the weight rather than off bare target membership.
         self.remote_restriction_floor = float(scoring.get("remote_restriction_floor", 2))
 
+        # UTC offsets you can actually work. Some boards state a remote
+        # role's permitted timezone band numerically, which is the only
+        # unambiguous way to tell "remote" from "remote, US hours".
+        self.utc_offsets = {
+            int(o) for o in (profile.get("identity", {}).get("utc_offsets") or [])
+        }
+        self.timezone_excluded = float(scoring.get("timezone_excluded", -8))
+
         # Weights for facts read out of the posting by the LLM stage. All are
         # score adjustments, never rejections -- see carodi/enrich_llm.py for
         # why a wrong "sponsorship denied" must demote rather than drop.
@@ -236,11 +244,29 @@ class Rules:
             score += 2
             reasons.append("+2 has deadline")
 
+        delta, notes = self._score_timezone(opp)
+        score += delta
+        reasons.extend(notes)
+
         delta, notes = self._score_llm_facts(opp)
         score += delta
         reasons.extend(notes)
 
         return score, reasons
+
+    def _score_timezone(self, opp: Opportunity) -> tuple[float, list[str]]:
+        """Penalise a remote role whose permitted hours you cannot work.
+
+        A numeric offset band is worth more than any "remote" label: a role open
+        only to UTC-8..-5 is US-hours work whatever the posting calls it.
+        """
+        offsets = opp.enrichment.get("timezone_offsets")
+        if not (isinstance(offsets, list) and offsets and self.utc_offsets):
+            return 0.0, []
+        if self.utc_offsets & {int(o) for o in offsets}:
+            return 0.0, []
+        band = f"UTC{min(offsets):+d}..{max(offsets):+d}"
+        return self.timezone_excluded, [f"{self.timezone_excluded:+g} timezone {band}"]
 
     def _score_llm_facts(self, opp: Opportunity) -> tuple[float, list[str]]:
         """Apply facts read out of the posting text, if the LLM stage ran.

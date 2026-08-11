@@ -170,7 +170,51 @@ sources:
         - embedded
       limit: 100
 
+  # Germany's Bundesagentur für Arbeit -- the largest German job database,
+  # open with no registration. Note /pc/v6/: the same documented header returns
+  # 403 on v4, which reads like the whole API is gated when it is not.
+  - type: arbeitsagentur
+    enabled: true
+    params:
+      name: arbeitsagentur-de
+      queries: [Softwareentwickler, Software Engineer, Backend, Embedded]
+      size: 50
+      published_since: 7
+
+  # -- remote-first boards ------------------------------------------------
+  # Himalayas states each remote role's permitted timezone band as UTC offsets,
+  # which is the only unambiguous way to tell "remote" from "remote, US hours".
+  - type: himalayas
+    enabled: true
+    params:
+      name: himalayas
+      pages: 5
+
   # -- feeds --------------------------------------------------------------
+  # Arbeitnow runs a separate UK instance on the same schema. GB is your
+  # highest-weighted country, so it is worth both.
+  - type: json_board
+    enabled: true
+    params:
+      name: arbeitnow-uk
+      url: https://www.arbeitnow.co.uk/api/job-board-api
+      items_path: data
+      title_field: title
+      org_field: company_name
+      url_field: url
+      location_field: location
+      description_field: description
+      tags_field: tags
+
+  # EURAXESS -- the European Commission's research-jobs portal. PhD positions
+  # and salaried research posts, which for a master's graduate is a relocation
+  # route in its own right.
+  - type: rss
+    enabled: true
+    params:
+      name: euraxess
+      url: https://euraxess.ec.europa.eu/job-feed
+
   - type: rss
     enabled: true
     params:

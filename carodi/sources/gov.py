@@ -5,9 +5,11 @@ authoritative record for their country, they are free, they are not defending
 themselves against scrapers, and their listings are legally required to be real
 vacancies rather than pipeline-building fiction.
 
-Coverage is uneven, though. Sweden publishes an open API with no key at all.
-Germany and Norway have public APIs behind a registration step. Most others
-have nothing, or feed EURES without exposing an endpoint of their own.
+Coverage is uneven. Sweden and Germany are open with no key at all -- though
+Germany's is easy to write off, because the documented header returns 403 on
+/pc/v4/ and only works on /pc/v6/. Norway and France are real APIs behind a
+registration step. Most others publish nothing, or feed EURES without exposing
+an endpoint of their own.
 """
 
 from __future__ import annotations
@@ -16,11 +18,37 @@ import logging
 from collections.abc import Iterable, Iterator
 from datetime import datetime
 
-from carodi.models import Kind, Opportunity
+from carodi.models import Kind, Opportunity, Remote
 from carodi.sources.ats import guess_kind, guess_remote, strip_html
 from carodi.sources.base import Source, register
 
 log = logging.getLogger(__name__)
+
+#: The German agency names countries in German. geo.py speaks English, so the
+#: common cross-border origins are translated rather than passed through.
+_GERMAN_COUNTRY_NAMES = {
+    "DEUTSCHLAND": "Germany",
+    "OESTERREICH": "Austria",
+    "ÖSTERREICH": "Austria",
+    "SCHWEIZ": "Switzerland",
+    "NIEDERLANDE": "Netherlands",
+    "FRANKREICH": "France",
+    "BELGIEN": "Belgium",
+    "LUXEMBURG": "Luxembourg",
+    "ITALIEN": "Italy",
+    "SPANIEN": "Spain",
+    "PORTUGAL": "Portugal",
+    "POLEN": "Poland",
+    "TSCHECHIEN": "Czechia",
+    "DAENEMARK": "Denmark",
+    "DÄNEMARK": "Denmark",
+    "SCHWEDEN": "Sweden",
+    "NORWEGEN": "Norway",
+    "FINNLAND": "Finland",
+    "IRLAND": "Ireland",
+    "UNGARN": "Hungary",
+    "GRIECHENLAND": "Greece",
+}
 
 
 @register("jobtech")
@@ -104,11 +132,9 @@ class JobTech(Source):
 class GovJson(Source):
     """Config-driven adapter for national feeds that need a key.
 
-    Germany's Bundesagentur für Arbeit and Norway's NAV both publish real APIs,
-    but both refuse anonymous calls -- Germany 403s the documented
-    `X-API-KEY: jobboerse-jobsuche` header and its public OAuth client no longer
-    issues tokens; NAV's feed 401s without a consumer token. Neither is a
-    scraping problem, just a registration step.
+    Norway's NAV feed 401s without a consumer token, and France Travail's OAuth
+    endpoint answers `invalid_client` -- both are real APIs behind a
+    registration step rather than a scraping problem.
 
     Rather than hardcode either, this maps an arbitrary JSON feed the same way
     `json_board` does, plus a header for the credential and a fixed country to
@@ -192,4 +218,160 @@ def _parse_date(value: str | None):
     return dt.date() if dt else None
 
 
-__all__ = ["GovJson", "JobTech", "Kind"]
+__all__ = ["Arbeitsagentur", "GovJson", "Himalayas", "JobTech", "Kind"]
+
+
+@register("arbeitsagentur")
+class Arbeitsagentur(Source):
+    """Germany -- Bundesagentur für Arbeit, the federal employment agency.
+
+    The largest job database in Germany, and open with no registration: the
+    documented `X-API-Key: jobboerse-jobsuche` works on `/pc/v6/jobs`. Note the
+    version -- v4 returns 403 with the same header, which is easy to mistake for
+    the whole API being gated.
+    """
+
+    API = "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v6/jobs"
+    KEY = "jobboerse-jobsuche"
+
+    def __init__(
+        self,
+        name: str = "arbeitsagentur-de",
+        queries: list[str] | None = None,
+        size: int = 50,
+        published_since: int = 7,
+    ):
+        self.name = name
+        self.queries = queries or ["Softwareentwickler", "Software Engineer"]
+        self.size = size
+        # `veroeffentlichtseit` is in days; a daily digest has no use for a
+        # three-month-old vacancy that the age filter would drop anyway.
+        self.published_since = published_since
+
+    def fetch(self) -> Iterator[Opportunity]:
+        seen: set[str] = set()
+        for query in self.queries:
+            try:
+                data = self._get_json(
+                    self.API,
+                    params={
+                        "was": query,
+                        "size": self.size,
+                        "veroeffentlichtseit": self.published_since,
+                    },
+                    headers={"X-API-Key": self.KEY},
+                )
+            except Exception as exc:  # noqa: BLE001 - one query must not sink the rest
+                log.warning("%s: query %r failed: %s", self.name, query, exc)
+                continue
+
+            for job in data.get("ergebnisliste") or []:
+                ref = str(job.get("referenznummer") or "")
+                if not ref or ref in seen:
+                    continue
+                seen.add(ref)
+                if opp := self._to_opportunity(job, ref):
+                    yield opp
+
+    def _to_opportunity(self, job: dict, ref: str) -> Opportunity | None:
+        title = (job.get("stellenangebotsTitel") or job.get("hauptberuf") or "").strip()
+        if not title:
+            return None
+
+        address = ((job.get("stellenlokationen") or [{}])[0]).get("adresse") or {}
+        town = (address.get("ort") or "").split(",")[0].strip()
+        # Do not assume Germany. The agency is EURES-connected and returns
+        # cross-border vacancies -- a "Softwareentwickler" search comes back
+        # full of Austrian listings, which are welcome but must not be
+        # mislabelled. Read the country the record states.
+        country = _GERMAN_COUNTRY_NAMES.get(
+            (address.get("land") or "").strip().upper(), "Germany"
+        )
+        location = f"{town}, {country}" if town else country
+
+        return Opportunity(
+            source=self.name,
+            kind=guess_kind(title),
+            title=title,
+            org=(job.get("firma") or "unknown").strip(),
+            # externeURL is the employer's own posting where present; otherwise
+            # the agency's public detail page. The API's detail endpoint would
+            # add one request per posting for a description we mostly do not
+            # get to use.
+            url=job.get("externeURL")
+            or f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{ref}",
+            location_raw=location,
+            # The one structured remote signal the list response carries.
+            remote=Remote.HYBRID if job.get("homeofficemoeglich") else guess_remote(location),
+            posted_at=_parse_dt(job.get("datumErsteVeroeffentlichung")),
+            tags=[b for b in (job.get("alleBerufe") or []) if isinstance(b, str)],
+        )
+
+
+@register("himalayas")
+class Himalayas(Source):
+    """Remote-only roles, with the restriction data most boards omit.
+
+    Every listing is verified remote, and each carries `locationRestrictions`
+    (country names) and `timezoneRestrictions` (UTC offsets). The offsets are
+    the useful part: a role open only to [-10..-5] is US-hours work, which no
+    amount of "remote" in the title tells you.
+    """
+
+    API = "https://himalayas.app/jobs/api"
+
+    def __init__(self, name: str = "himalayas", pages: int = 5, per_page: int = 20):
+        self.name = name
+        # The API caps a page at 20 following its own performance work.
+        self.per_page = min(per_page, 20)
+        self.pages = pages
+
+    def fetch(self) -> Iterator[Opportunity]:
+        for page in range(self.pages):
+            try:
+                data = self._get_json(
+                    self.API, params={"limit": self.per_page, "offset": page * self.per_page}
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.warning("%s: page %d failed: %s", self.name, page, exc)
+                return
+            jobs = data.get("jobs") or []
+            if not jobs:
+                return
+            for job in jobs:
+                if opp := self._to_opportunity(job):
+                    yield opp
+
+    def _to_opportunity(self, job: dict) -> Opportunity | None:
+        title = (job.get("title") or "").strip()
+        url = job.get("applicationLink")
+        if not title or not url:
+            return None
+
+        restrictions = [str(r) for r in (job.get("locationRestrictions") or [])]
+        offsets = [int(t) for t in (job.get("timezoneRestrictions") or []) if isinstance(t, int)]
+
+        opp = Opportunity(
+            source=self.name,
+            kind=guess_kind(title),
+            title=title,
+            org=(job.get("companyName") or "unknown").strip(),
+            url=url,
+            location_raw=", ".join(restrictions) or "Remote",
+            remote=Remote.REMOTE,
+            description=strip_html(job.get("description") or job.get("excerpt") or "")[:4000],
+            posted_at=_from_epoch(job.get("pubDate")),
+            tags=[s for s in (job.get("seniority") or []) if isinstance(s, str)],
+        )
+        # Handed to the rules rather than acted on here: a source reports, it
+        # does not decide. See Rules._score_timezone.
+        if offsets:
+            opp.enrichment["timezone_offsets"] = sorted(set(offsets))
+        return opp
+
+
+def _from_epoch(value) -> datetime | None:
+    try:
+        return datetime.fromtimestamp(int(value))
+    except (TypeError, ValueError, OSError):
+        return None

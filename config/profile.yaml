@@ -6,6 +6,9 @@ identity:
   nationality: JO
   based_in: CY
   graduating: 2027-06        # ~1 year out; internships and new-grad roles are in scope
+  # Cyprus is EET/EEST. Boards that state a remote role's permitted timezone
+  # band numerically let carodi tell "remote" from "remote, US hours".
+  utc_offsets: [2, 3]
 
 # Onsite roles outside this list are rejected outright; everything on it is
 # ranked by scoring.country_bonus below. Membership answers "should I ever see
@@ -251,6 +254,9 @@ scoring:
   # geographically closed. At floor 2, "remote (US only)" is penalised while
   # "remote (UK)" is not -- which is the whole point of weighting US at 1.
   remote_restriction_floor: 2
+
+  # A remote role whose stated timezone band excludes yours.
+  timezone_excluded: -8
 
   sponsor_bonus: 5
 

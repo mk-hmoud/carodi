@@ -727,3 +727,40 @@ def test_an_existing_database_gains_new_columns(tmp_path):
         # The pre-existing row survives, and defaults to the oldest version.
         assert store.cached_extraction("fp1", schema_version=1) is not None
         assert store.cached_extraction("fp1", schema_version=2) is None
+
+
+# -- timezone-restricted remote work ---------------------------------------
+
+TZ_PROFILE = {**PROFILE, "identity": {"utc_offsets": [2, 3]},
+              "scoring": {**PROFILE["scoring"], "timezone_excluded": -8}}
+
+
+def test_us_hours_remote_is_penalised():
+    """A numeric offset band is the only unambiguous way to tell 'remote' from
+    'remote, US hours' -- no wording in the title conveys it."""
+    rules = Rules(TZ_PROFILE)
+    o = opp()
+    o.enrichment["timezone_offsets"] = [-8, -7, -6, -5]
+    score, reasons = rules.score(o)
+    assert score < 0
+    assert any("timezone UTC-8..-5" in r for r in reasons)
+
+
+def test_a_band_including_your_offset_is_fine():
+    rules = Rules(TZ_PROFILE)
+    o = opp()
+    o.enrichment["timezone_offsets"] = [0, 1, 2, 3]
+    assert not any("timezone" in r for r in rules.score(o)[1])
+
+
+def test_no_stated_band_is_not_penalised():
+    """Absence of a restriction is not a restriction."""
+    rules = Rules(TZ_PROFILE)
+    assert not any("timezone" in r for r in rules.score(opp())[1])
+
+
+def test_timezone_rule_is_inert_without_configured_offsets():
+    rules = Rules(PROFILE)
+    o = opp()
+    o.enrichment["timezone_offsets"] = [-8, -5]
+    assert not any("timezone" in r for r in rules.score(o)[1])
