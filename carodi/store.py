@@ -111,6 +111,18 @@ CREATE TABLE IF NOT EXISTS llm_extractions (
 );
 """
 
+#: Columns added to tables that already exist in deployed databases.
+#:
+#: `CREATE TABLE IF NOT EXISTS` silently does nothing when the table is already
+#: there, so a new column in SCHEMA reaches fresh databases only. Tests all run
+#: against a fresh tmp file and therefore cannot catch this -- the first sign is
+#: `no such column` on the live database, mid-run.
+#:
+#: (table, column, full column definition)
+MIGRATIONS: tuple[tuple[str, str, str], ...] = (
+    ("llm_extractions", "schema_version", "schema_version INTEGER NOT NULL DEFAULT 1"),
+)
+
 #: Terminal states -- these never reappear in a digest.
 DECIDED = ("applied", "skipped")
 
@@ -122,7 +134,15 @@ class Store:
         self.conn = sqlite3.connect(self.path)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Add columns SCHEMA cannot add to an already-existing table."""
+        for table, column, definition in MIGRATIONS:
+            existing = {row["name"] for row in self.conn.execute(f"PRAGMA table_info({table})")}
+            if existing and column not in existing:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
 
     def close(self) -> None:
         self.conn.close()

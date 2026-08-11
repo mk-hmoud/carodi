@@ -700,3 +700,30 @@ def test_every_target_country_is_actually_detectable():
 )
 def test_newly_added_countries_are_detected(location, expected):
     assert expected in geo.detect_countries(location)
+
+
+def test_an_existing_database_gains_new_columns(tmp_path):
+    """Regression: CREATE TABLE IF NOT EXISTS does nothing to a table that
+    already exists, so a new column reached fresh databases only. Every test
+    uses a fresh tmp file, so the first sign was `no such column` on the live
+    database mid-run."""
+    import sqlite3 as _sqlite3
+
+    path = tmp_path / "old.db"
+    conn = _sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE llm_extractions (fingerprint TEXT PRIMARY KEY, model TEXT NOT NULL, "
+        "payload TEXT NOT NULL, extracted_at TEXT NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO llm_extractions VALUES ('fp1','m','{\"sponsorship\":\"unmentioned\"}','now')"
+    )
+    conn.commit()
+    conn.close()
+
+    with Store(path) as store:
+        cols = {r["name"] for r in store.conn.execute("PRAGMA table_info(llm_extractions)")}
+        assert "schema_version" in cols
+        # The pre-existing row survives, and defaults to the oldest version.
+        assert store.cached_extraction("fp1", schema_version=1) is not None
+        assert store.cached_extraction("fp1", schema_version=2) is None
