@@ -125,7 +125,8 @@ class LlmEnricher:
         model: str,
         store: Store,
         max_per_run: int = 40,
-        min_interval: float = 6.5,
+        requests_per_minute: int = 15,
+        safety: float = 1.15,
         max_chars: int = 6000,
         disable_thinking: bool = True,
     ):
@@ -139,11 +140,14 @@ class LlmEnricher:
         self.client = genai.Client(api_key=api_key)
         self.model = model
         self.store = store
-        # Free-tier quotas are per-minute and per-day. min_interval keeps us
-        # under the RPM ceiling; max_per_run bounds a cold cache, where a first
-        # run would otherwise try to read every posting at once.
+        # Pacing is derived from the provider's stated RPM, never hand-tuned.
+        # Writing an interval by hand means guessing the limit, and a guess that
+        # is too fast fails every call: the first live run paced 9/min against a
+        # 5 RPM ceiling and burned a whole day's quota in about two minutes.
+        # `safety` leaves headroom for clock skew and request jitter.
         self.max_per_run = max_per_run
-        self.min_interval = min_interval
+        self.requests_per_minute = requests_per_minute
+        self.min_interval = (60.0 / requests_per_minute) * safety
         self.max_chars = max_chars
         self.disable_thinking = disable_thinking
 

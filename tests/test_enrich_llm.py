@@ -47,7 +47,7 @@ class FakeEnricher(LlmEnricher):
         self.model = "fake-model"
         self.store = store
         self.max_per_run = kw.get("max_per_run", 40)
-        self.min_interval = 0.0
+        self.min_interval = 0.0  # tests must not sleep
         self.max_chars = 6000
         self.disable_thinking = True
         self._reset_counters()  # shared with the real enricher, so state can't drift
@@ -286,3 +286,24 @@ def test_cached_items_still_resolve_after_a_halt(store):
     halted.enrich(fresh)
 
     assert fresh.enrichment["llm"]["sponsorship"] == "offered"
+
+
+# -- pacing ----------------------------------------------------------------
+
+
+def test_interval_is_derived_from_the_stated_rpm(store, monkeypatch):
+    """Regression: the interval was hand-written against a guessed 10 RPM while
+    the real ceiling was 5, so the first live run was 80% over the rate limit
+    from its first minute and burned a day's quota in about two."""
+    monkeypatch.setattr("google.genai.Client", lambda **kw: object())
+
+    for rpm, ceiling in ((5, 5), (15, 15)):
+        e = LlmEnricher(api_key="k", model="m", store=store, requests_per_minute=rpm)
+        effective = 60.0 / e.min_interval
+        assert effective < ceiling, f"{effective:.1f}/min exceeds the {ceiling} RPM limit"
+
+
+def test_pacing_leaves_headroom_below_the_limit(store, monkeypatch):
+    monkeypatch.setattr("google.genai.Client", lambda **kw: object())
+    e = LlmEnricher(api_key="k", model="m", store=store, requests_per_minute=15)
+    assert 12.0 < 60.0 / e.min_interval < 15.0

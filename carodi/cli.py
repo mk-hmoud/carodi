@@ -161,7 +161,7 @@ def cmd_llm(args: argparse.Namespace) -> int:
         print(f"model:   {model}\n")
 
         enricher = LlmEnricher(
-            api_key=api_key, model=model, store=store, min_interval=0.0,
+            api_key=api_key, model=model, store=store, requests_per_minute=600,
             disable_thinking=cfg.get("disable_thinking", False),
         )
         result = enricher.extract(opp)

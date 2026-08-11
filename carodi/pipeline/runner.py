@@ -77,7 +77,7 @@ class Funnel:
                 model=cfg.get("model", "gemini-2.5-flash"),
                 store=self.store,
                 max_per_run=cfg.get("max_per_run", 40),
-                min_interval=cfg.get("min_interval", 6.5),
+                requests_per_minute=cfg.get("requests_per_minute", 15),
                 disable_thinking=cfg.get("disable_thinking", True),
             )
         except Exception as exc:  # noqa: BLE001 - optional stage
