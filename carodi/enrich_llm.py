@@ -40,6 +40,12 @@ log = logging.getLogger(__name__)
 #: for every 4xx, so the status code alone does not distinguish them.
 _QUOTA_MARKERS = ("RESOURCE_EXHAUSTED", "429", "quota")
 
+#: Bump whenever the Extraction schema changes. Rows cached under an older
+#: version are treated as misses: a row extracted before a field existed cannot
+#: answer for it, and reading a missing key as False would look exactly like a
+#: confident "no" rather than "never asked".
+EXTRACTION_SCHEMA_VERSION = 2
+
 
 def _is_quota_error(exc: Exception) -> bool:
     text = str(exc)
@@ -91,6 +97,18 @@ class Extraction(BaseModel):
             "ISO 3166-1 alpha-2 codes. Empty if not remote, or if remote with no "
             "stated geographic restriction."
         ),
+    )
+    requires_local_status: bool = Field(
+        description=(
+            "True if the applicant must ALREADY hold local work authorization, or "
+            "already be enrolled at a university in the role's own country. "
+            "Examples: a German Werkstudent contract (requires a German university "
+            "place), a US internship requiring F-1 CPT/OPT, 'must have the right to "
+            "work in the UK', 'open to students enrolled at a Berlin university'. "
+            "This is about status the applicant must already possess. It is NOT the "
+            "same as an employer declining to sponsor, which belongs in the "
+            "sponsorship field."
+        )
     )
     salary_min: int | None = Field(default=None, description="Annual minimum, if stated.")
     salary_currency: str | None = Field(default=None, description="ISO 4217, e.g. EUR.")
@@ -232,7 +250,7 @@ class LlmEnricher:
         run -- the deterministic signals still work without it, exactly as a
         missing sponsor register degrades to "unknown".
         """
-        if cached := self.store.cached_extraction(opp.fingerprint):
+        if cached := self.store.cached_extraction(opp.fingerprint, EXTRACTION_SCHEMA_VERSION):
             opp.enrichment["llm"] = cached
             self.cached += 1
             return
@@ -275,7 +293,9 @@ class LlmEnricher:
 
         payload = extraction.model_dump(mode="json")
         opp.enrichment["llm"] = payload
-        self.store.record_extraction(opp.fingerprint, self.model, payload)
+        self.store.record_extraction(
+            opp.fingerprint, self.model, payload, EXTRACTION_SCHEMA_VERSION
+        )
         self.extracted += 1
 
     def stats(self) -> dict:

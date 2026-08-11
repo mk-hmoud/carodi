@@ -103,10 +103,11 @@ CREATE INDEX IF NOT EXISTS idx_probe_found ON ats_probes(found, confidence);
 -- The model is recorded alongside: swapping models should not silently mix
 -- outputs from two different readers in one digest.
 CREATE TABLE IF NOT EXISTS llm_extractions (
-    fingerprint  TEXT PRIMARY KEY,
-    model        TEXT NOT NULL,
-    payload      TEXT NOT NULL,
-    extracted_at TEXT NOT NULL
+    fingerprint    TEXT PRIMARY KEY,
+    model          TEXT NOT NULL,
+    payload        TEXT NOT NULL,
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    extracted_at   TEXT NOT NULL
 );
 """
 
@@ -340,21 +341,33 @@ class Store:
 
     # -- LLM extraction cache -------------------------------------------------
 
-    def cached_extraction(self, fingerprint: str) -> dict | None:
+    def cached_extraction(self, fingerprint: str, schema_version: int = 1) -> dict | None:
+        """Cached facts, but only if written under the current schema.
+
+        A row from an older schema is a miss, not a hit: it cannot answer for
+        a field that did not exist when it was written.
+        """
         row = self.conn.execute(
-            "SELECT payload FROM llm_extractions WHERE fingerprint = ?", (fingerprint,)
+            "SELECT payload FROM llm_extractions "
+            "WHERE fingerprint = ? AND schema_version >= ?",
+            (fingerprint, schema_version),
         ).fetchone()
         return json.loads(row["payload"]) if row else None
 
-    def record_extraction(self, fingerprint: str, model: str, payload: dict) -> None:
+    def record_extraction(
+        self, fingerprint: str, model: str, payload: dict, schema_version: int = 1
+    ) -> None:
         self.conn.execute(
-            """INSERT INTO llm_extractions (fingerprint, model, payload, extracted_at)
-               VALUES (?,?,?,?)
+            """INSERT INTO llm_extractions
+                   (fingerprint, model, payload, schema_version, extracted_at)
+               VALUES (?,?,?,?,?)
                ON CONFLICT(fingerprint) DO UPDATE SET
                    model = excluded.model,
                    payload = excluded.payload,
+                   schema_version = excluded.schema_version,
                    extracted_at = excluded.extracted_at""",
-            (fingerprint, model, json.dumps(payload), datetime.now().isoformat(timespec="seconds")),
+            (fingerprint, model, json.dumps(payload), schema_version,
+             datetime.now().isoformat(timespec="seconds")),
         )
 
     def count_extractions(self) -> int:

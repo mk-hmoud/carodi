@@ -118,6 +118,7 @@ class Rules:
         self.llm_per_excess_year = float(llm.get("per_excess_year", -1.5))
         self.llm_years_allowed = int(llm.get("years_allowed", 2))
         self.llm_remote_excluded = float(llm.get("remote_excluded", -8))
+        self.llm_local_status = float(llm.get("requires_local_status", -14))
 
     # -- hard eligibility -----------------------------------------------------
 
@@ -261,6 +262,15 @@ class Rules:
             case "denied":
                 score += self.llm_sponsorship_denied
                 reasons.append(f"{self.llm_sponsorship_denied:+g} posting denies sponsorship")
+
+        # The single most common way a role is impossible rather than merely
+        # unlikely: a German Werkstudent contract, a US internship needing F-1
+        # CPT, "must already have the right to work here". Weighted below the
+        # threshold on its own, but still a demotion rather than a rejection --
+        # a wrong read here would silently delete a real opportunity.
+        if facts.get("requires_local_status"):
+            score += self.llm_local_status
+            reasons.append(f"{self.llm_local_status:+g} requires local status you lack")
 
         if facts.get("is_entry_level"):
             score += self.llm_entry_level

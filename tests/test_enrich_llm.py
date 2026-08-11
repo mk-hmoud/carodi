@@ -65,6 +65,7 @@ def extraction(**kw) -> Extraction:
     base = dict(
         sponsorship=Sponsorship.UNMENTIONED,
         is_entry_level=False,
+        requires_local_status=False,
         remote_restricted_to=[],
         one_line_fit="test",
     )
@@ -307,3 +308,32 @@ def test_pacing_leaves_headroom_below_the_limit(store, monkeypatch):
     monkeypatch.setattr("google.genai.Client", lambda **kw: object())
     e = LlmEnricher(api_key="k", model="m", store=store, requests_per_minute=15)
     assert 12.0 < 60.0 / e.min_interval < 15.0
+
+
+def test_local_status_requirement_sinks_a_role():
+    """Werkstudent contracts and F-1 CPT internships are impossible, not merely
+    unlikely -- but still a demotion, never a rejection."""
+    rules = Rules(PROFILE)
+    o = opp()
+    geo.annotate(o)
+    o.enrichment["llm"] = extraction(requires_local_status=True).model_dump(mode="json")
+
+    assert rules.reject(o) is None, "an extracted fact must never cause a rejection"
+
+    score, reasons = rules.score(o)
+
+    assert any("local status" in r for r in reasons)
+    # Enough to sink it below the threshold on its own, whatever else it scored.
+    assert score < 0 and not rules.evaluate(o).passed
+
+
+def test_a_stale_cache_row_is_not_read_as_a_confident_no(store):
+    """A row written before requires_local_status existed cannot answer for it.
+    Reading the missing key as False would look exactly like 'no requirement'."""
+    from carodi.enrich_llm import EXTRACTION_SCHEMA_VERSION
+
+    store.record_extraction("fp1", "old-model", {"sponsorship": "unmentioned"}, schema_version=1)
+    store.commit()
+
+    assert store.cached_extraction("fp1", schema_version=1) is not None
+    assert store.cached_extraction("fp1", EXTRACTION_SCHEMA_VERSION) is None

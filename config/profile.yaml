@@ -61,6 +61,27 @@ hard_filters:
     - architect
     - fellow engineer
     - distinguished
+    # Contracts requiring enrolment at a university in that country. A German
+    # Werkstudent contract needs a German university place; you are enrolled in
+    # North Cyprus, so these are not roles you can hold whatever the fit.
+    # Delete these lines if you ever enrol inside the EU.
+    - werkstudent
+    - werkstudentin
+    - working student
+    - praktikum
+    - praktikant
+    - duales studium
+    - ausbildung
+    # Functions that are not yours. must_any should catch these now, but a
+    # title like "Sales Engineer" carries a field word by accident.
+    - sales
+    - marketing
+    - recruiter
+    - talent acquisition
+    - controlling
+    - office management
+    - customer success
+    - business development
 
   # Phrases that reliably mean "you specifically cannot take this job".
   exclude_phrases:
@@ -84,10 +105,15 @@ keywords:
   # roles through on the strength of boilerplate.
   must_any_scope: title
 
-  # At least one of these must appear in the title, or it is not your field.
+  # FIELD keywords only -- never employment type. "intern" and "working
+  # student" used to live here, which meant "Sales Intern" satisfied the
+  # is-this-my-field check on the word "intern". Whether a role is an
+  # internship is a separate question from whether it is engineering, and
+  # mixing the two let every function in the company through.
   must_any:
     - software engineer
     - software developer
+    - software engineering
     - backend
     - back end
     - frontend
@@ -97,17 +123,24 @@ keywords:
     - platform engineer
     - infrastructure engineer
     - systems engineer
+    - site reliability
+    - devops
     - embedded
     - firmware
     - computer engineer
-    - graduate engineer
-    - new grad
-    - intern
-    - internship
-    - working student
-    - junior developer
+    - computer engineering
     - data engineer
-    - machine learning engineer
+    - machine learning
+    - ml engineer
+    - research engineer
+    - security engineer
+    - mobile engineer
+    - android developer
+    - ios developer
+    - developer
+    - softwareentwickler        # German postings rarely say "software engineer"
+    - softwareentwicklung
+    - informatik
 
   # Weights are arbitrary; only their ratios matter. Edit freely.
   # Matched against the whole posting, punctuation intact — "c++" and "node.js"
@@ -116,7 +149,6 @@ keywords:
     graduate program: 6
     new grad: 6
     internship: 5
-    working student: 5
     junior: 4
     entry level: 4
     visa sponsorship: 6
@@ -231,3 +263,6 @@ scoring:
     per_excess_year: -1.5
     years_allowed: 2
     remote_excluded: -8
+    # Enough to sink a role below the threshold on its own: a contract you
+    # are not eligible to sign is not a near miss.
+    requires_local_status: -14
