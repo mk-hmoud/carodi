@@ -5,7 +5,7 @@ import pytest
 from carodi.models import Kind
 from carodi.sources.ats import guess_kind, guess_remote, strip_html
 from carodi.sources.feeds import HnWhoIsHiring
-from carodi.sources.gov import Arbeitsagentur, GovJson, JobTech
+from carodi.sources.gov import Arbeitsagentur, Eures, GovJson, JobTech
 
 
 @pytest.mark.parametrize(
@@ -239,3 +239,57 @@ def test_arbeitsagentur_uses_the_homeoffice_flag():
     job["homeofficemoeglich"] = True
     [opp] = list(_FakeAgentur([job], queries=["x"]).fetch())
     assert str(opp.remote) == "hybrid"
+
+
+class _FakeEures(Eures):
+    def __init__(self, rows, **kw):
+        super().__init__(**kw)
+        self._rows = rows
+
+    def _search(self, query, page):
+        return {"jvs": self._rows if page == 1 else []}
+
+
+def _jv(jv_id="ABC", country="DE", employer="ACME GmbH"):
+    return {
+        "id": jv_id,
+        "title": "Software Engineer (m/w/d)",
+        "employer": {"name": employer},
+        "locationMap": {country: [f"{country}929"]},
+        "description": "<p>We build things.</p>",
+        "creationDate": 1786105932000,
+        "euresFlag": False,
+    }
+
+
+def test_eures_uses_its_own_country_codes():
+    """locationMap gives ISO codes directly; re-deriving them from a location
+    string would find nothing, since 'DE' matches no German hint."""
+    [opp] = list(_FakeEures([_jv(country="NL")], pages=1).fetch())
+    assert opp.countries == ["NL"]
+
+    from carodi.pipeline import geo
+
+    geo.annotate(opp)
+    assert opp.countries == ["NL"], "geo.annotate must not overwrite a stated country"
+
+
+def test_eures_normalises_anonymous_employers():
+    """EURES lets employers stay anonymous; 'Non renseigné' in a digest is noise."""
+    [opp] = list(_FakeEures([_jv(employer="Non renseigné")], pages=1).fetch())
+    assert opp.org == "undisclosed employer"
+
+
+def test_eures_links_to_the_public_detail_page():
+    [opp] = list(_FakeEures([_jv(jv_id="XYZ")], pages=1).fetch())
+    assert "jv-details/XYZ" in str(opp.url)
+
+
+def test_eures_dedupes_across_queries_and_pages():
+    src = _FakeEures([_jv(), _jv()], queries=["a", "b"], pages=1)
+    assert len(list(src.fetch())) == 1
+
+
+def test_eures_caps_page_size_at_the_api_limit():
+    """The endpoint 400s above 50."""
+    assert Eures(per_page=500).per_page == 50

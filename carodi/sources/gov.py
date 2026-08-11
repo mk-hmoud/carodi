@@ -218,7 +218,7 @@ def _parse_date(value: str | None):
     return dt.date() if dt else None
 
 
-__all__ = ["Arbeitsagentur", "GovJson", "Himalayas", "JobTech", "Kind"]
+__all__ = ["Arbeitsagentur", "Eures", "GovJson", "Himalayas", "JobTech", "Kind"]
 
 
 @register("arbeitsagentur")
@@ -373,5 +373,128 @@ class Himalayas(Source):
 def _from_epoch(value) -> datetime | None:
     try:
         return datetime.fromtimestamp(int(value))
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+@register("eures")
+class Eures(Source):
+    """The European Commission's job mobility portal -- 250k+ vacancies, 31 countries.
+
+    Undocumented but public: a POST search endpoint the portal's own front end
+    uses. No key, no registration. `locationMap` gives clean ISO country codes,
+    and records carry full description text, which is what the extraction stage
+    needs.
+
+    One honest caveat: EURES exists to support free movement of EU/EEA
+    *citizens*. A listing appearing here is not evidence the employer will
+    sponsor a non-EU national -- these are simply real vacancies with unusually
+    good metadata. `euresFlag` marks employers interested in cross-border
+    recruitment within the EEA, which is a different thing again.
+
+    Volume is the real constraint: an unfiltered search matches a quarter of a
+    million rows, so queries and countries are mandatory and paging is capped.
+    """
+
+    API = "https://europa.eu/eures/api/jv-searchengine/public/jv-search/search"
+    DETAIL = "https://europa.eu/eures/portal/jv-se/jv-details/{id}?lang=en"
+    #: The endpoint 400s above 50.
+    MAX_PER_PAGE = 50
+
+    def __init__(
+        self,
+        name: str = "eures",
+        queries: list[str] | None = None,
+        countries: list[str] | None = None,
+        pages: int = 2,
+        per_page: int = 50,
+    ):
+        self.name = name
+        self.queries = queries or ["software engineer"]
+        self.countries = [c.upper() for c in (countries or [])]
+        self.pages = pages
+        self.per_page = min(per_page, self.MAX_PER_PAGE)
+
+    def _search(self, query: str, page: int) -> dict:
+        with self._client(timeout=40.0) as client:
+            response = client.post(
+                self.API,
+                json={
+                    "keywords": [{"keyword": query, "specificSearchCode": "EVERYWHERE"}],
+                    "locationCodes": self.countries,
+                    "resultsPerPage": self.per_page,
+                    "page": page,
+                    "sortSearch": "BEST_MATCH",
+                    "sessionId": "",
+                },
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    def fetch(self) -> Iterator[Opportunity]:
+        seen: set[str] = set()
+        for query in self.queries:
+            for page in range(1, self.pages + 1):
+                try:
+                    data = self._search(query, page)
+                except Exception as exc:  # noqa: BLE001 - one page must not sink the rest
+                    log.warning("%s: %r page %d failed: %s", self.name, query, page, exc)
+                    break
+
+                rows = data.get("jvs") or []
+                if not rows:
+                    break
+                for row in rows:
+                    jv_id = str(row.get("id") or "")
+                    if not jv_id or jv_id in seen:
+                        continue
+                    seen.add(jv_id)
+                    if opp := self._to_opportunity(row, jv_id):
+                        yield opp
+
+    def _to_opportunity(self, row: dict, jv_id: str) -> Opportunity | None:
+        title = (row.get("title") or "").strip()
+        if not title:
+            return None
+
+        # locationMap is {"DE": ["DE929"]} -- ISO country code to NUTS regions.
+        # The country codes are exactly what geo.py wants, so hand them over
+        # directly rather than round-tripping through a place name.
+        location_map = row.get("locationMap") or {}
+        countries = sorted(str(c).upper() for c in location_map if c)
+
+        employer = (row.get("employer") or {}).get("name") or ""
+        # EURES anonymises many employers; "not specified" in five languages is
+        # noise in a digest, so normalise it.
+        if employer.strip().lower() in _UNNAMED_EMPLOYERS or not employer.strip():
+            employer = "undisclosed employer"
+
+        opp = Opportunity(
+            source=self.name,
+            kind=guess_kind(title),
+            title=title,
+            org=employer.strip(),
+            url=self.DETAIL.format(id=jv_id),
+            location_raw=", ".join(countries) or "Europe",
+            countries=countries,
+            description=strip_html(row.get("description") or "")[:4000],
+            posted_at=_from_epoch_ms(row.get("creationDate")),
+        )
+        if row.get("euresFlag"):
+            opp.enrichment["eures_cross_border"] = True
+        return opp
+
+
+#: EURES lets employers stay anonymous; the placeholder varies by language.
+_UNNAMED_EMPLOYERS = {
+    "non renseigné", "not specified", "nicht angegeben", "no especificado",
+    "non specificato", "niet gespecificeerd", "confidential", "n/a",
+}
+
+
+def _from_epoch_ms(value) -> datetime | None:
+    try:
+        return datetime.fromtimestamp(int(value) / 1000)
     except (TypeError, ValueError, OSError):
         return None

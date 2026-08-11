@@ -6,6 +6,7 @@ from carodi.sinks.base import (
     accountability_line,
     group_by_kind,
     location_line,
+    source_label,
     sponsor_badge,
 )
 
@@ -27,7 +28,7 @@ class ConsoleSink(Sink):
                 print(f"       {opp.url}")
                 if opp.deadline:
                     print(f"       deadline: {opp.deadline.isoformat()}")
-                print(f"       {opp.fingerprint} · {', '.join(opp.reasons)}")
+                print(f"       {opp.fingerprint} · via {source_label(opp)} · {', '.join(opp.reasons)}")
 
         print(f"\n{accountability_line(accountability)}")
         for label, err in errors.items():

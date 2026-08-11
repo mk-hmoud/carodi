@@ -94,3 +94,17 @@ def test_chunking_never_drops_content():
     items = [opp(title=f"Engineer {i}", url=f"https://example.com/{i}") for i in range(120)]
     text = sink().render(items, STATS, {})
     assert "\n".join(sink()._chunks(text)) == text
+
+
+def test_digest_names_the_source_of_each_listing():
+    """A dozen sources of very different quality: knowing which one found a
+    listing is the fastest way to judge it, and to spot a source gone bad."""
+    text = sink().render([opp(source="jobtech-se")], STATS, {})
+    assert "via jobtech-se" in text
+
+
+def test_ats_sources_show_the_provider_not_the_board():
+    from carodi.sinks.base import source_label
+
+    assert source_label(opp(source="greenhouse:monzo")) == "greenhouse"
+    assert source_label(opp(source="eures")) == "eures"

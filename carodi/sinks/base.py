@@ -38,6 +38,18 @@ def sponsor_badge(opp: Opportunity) -> str:
     return f"✅ sponsor: {', '.join(countries)}"
 
 
+def source_label(opp: Opportunity) -> str:
+    """Which feed found this.
+
+    With a dozen sources of very different quality, "where did this come from"
+    is the fastest way to judge a listing at a glance -- and the fastest way to
+    notice a source that has started producing junk.
+    """
+    # ATS sources namespace themselves as "greenhouse:monzo"; the board name is
+    # already visible as the employer, so the provider alone is the useful part.
+    return opp.source.split(":", 1)[0]
+
+
 def location_line(opp: Opportunity) -> str:
     bits = [opp.location_raw or ", ".join(opp.countries) or "location unknown"]
     if str(opp.remote) != "onsite":

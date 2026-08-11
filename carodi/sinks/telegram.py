@@ -17,6 +17,7 @@ from carodi.sinks.base import (
     accountability_line,
     group_by_kind,
     location_line,
+    source_label,
     sponsor_badge,
 )
 
@@ -66,7 +67,10 @@ class TelegramSink(Sink):
                     if opp.deadline:
                         meta.append(f"⏳ {opp.deadline.isoformat()}")
                     lines.append(f"  <i>{' · '.join(m for m in meta if m)}</i>")
-                    lines.append(f"  <code>{opp.fingerprint}</code> · score {opp.score:g}")
+                    lines.append(
+                        f"  <code>{opp.fingerprint}</code> · score {opp.score:g}"
+                        f" · via {esc(source_label(opp))}"
+                    )
 
         lines.append(f"\n<i>{esc(accountability_line(accountability))}</i>")
         if errors:

@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import httpx
 
 from carodi.models import Opportunity
-from carodi.sinks.base import location_line, sponsor_badge
+from carodi.sinks.base import location_line, source_label, sponsor_badge
 from carodi.store import Store
 
 log = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ class Card:
 def render_card(opp: Opportunity, index: int, total: int) -> Card:
     """One opportunity, with the actions that resolve it."""
     lines = [
-        f"<b>{index + 1} of {total}</b> · score {opp.score:g}",
+        f"<b>{index + 1} of {total}</b> · score {opp.score:g} · via {esc(source_label(opp))}",
         "",
         f'<a href="{esc(str(opp.url))}">{esc(opp.title)}</a>',
         f"<b>{esc(opp.org)}</b> · {esc(location_line(opp))}",

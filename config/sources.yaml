@@ -92,20 +92,64 @@ sources:
   # Every token below was verified to return 200 on 2026-08-07. Companies move
   # between ATS vendors, so a 404 here means "look up their careers page again",
   # not "carodi is broken" -- the run continues either way.
+  # Boards found by `carodi discover`: every one belongs to an employer on the
+  # UK or Dutch sponsor register, so eligibility is verified rather than hoped
+  # for. This replaced a hand-picked list that was two-thirds American.
   - type: greenhouse
     enabled: true
     params:
       name: greenhouse
       boards:
-        - monzo
-        - gocardless
-        - cloudflare
-        - datadog
-        - elastic
+        - affirm
         - airbnb
-        - stripe
+        - akqa
+        - anthropic
+        - autoscout24
+        - avepoint
+        - awin
+        - baringa
+        - captify
+        - clickhouse
+        - cloudflare
         - databricks
+        - datadog
+        - dept
+        - doctolib
+        - dominodatalab
+        - dotmatics
+        - duettoresearch
         - figma
+        - fivetran
+        - flowtraders
+        - gitlab
+        - gocardless
+        - heliosx
+        - hellofresh
+        - jetbrains
+        - kaluza
+        - kayak
+        - liberis
+        - monzo
+        - nebius
+        - oliver
+        - physicsx
+        - ripple
+        - riverlane
+        - robinhood
+        - scopely
+        - smartsheet
+        - stripe
+        - sumup
+        - tanium
+        - tripadvisor
+        - unybrands
+        - veeamsoftware
+        - vercel
+        - wppmedia
+        - wppproduction
+        - zetaglobal
+        - zoominfo
+        - zscaler
 
   - type: lever
     enabled: true
@@ -113,8 +157,13 @@ sources:
       name: lever
       boards:
         - spotify
+        - pigment
+        - trendyol
         - plaid
 
+  # Ashby and Lever do not declare a company name, so `discover` could not
+  # auto-verify these -- each was confirmed by eye against the register match
+  # and its job count before being added.
   - type: ashby
     enabled: true
     params:
@@ -125,6 +174,23 @@ sources:
         - vercel
         - deel
         - posthog
+        - openai
+        - snowflake
+        - airwallex
+        - elevenlabs
+        - harvey
+        - deliveroo
+        - clickhouse
+        - doctolib
+        - kong
+        - thought-machine
+        - monumental
+        - statista
+        - allica-bank
+        - sosafe
+        - choco
+        - cuspai
+        - aptura
 
   # -- open job APIs ------------------------------------------------------
   - type: json_board
@@ -180,6 +246,27 @@ sources:
       queries: [Softwareentwickler, Software Engineer, Backend, Embedded]
       size: 50
       published_since: 7
+
+  # EURES -- the European Commission's mobility portal. 250k+ vacancies across
+  # 31 countries with full descriptions and clean ISO country codes, no key.
+  #
+  # Caveat worth remembering: EURES exists to support free movement of EU/EEA
+  # *citizens*. A listing here is not evidence the employer will sponsor a
+  # non-EU national -- it is simply a real vacancy with unusually good metadata.
+  #
+  # Volume is the constraint: unfiltered searches match a quarter of a million
+  # rows, so queries and countries are mandatory and paging is capped.
+  - type: eures
+    enabled: true
+    params:
+      name: eures
+      queries:
+        - software engineer
+        - backend developer
+        - embedded software
+      countries: ["DE", "NL", "SE", "IE", "DK", "FI", "AT", "BE", "PT", "ES", "PL", "CZ"]
+      pages: 2
+      per_page: 50
 
   # -- remote-first boards ------------------------------------------------
   # Himalayas states each remote role's permitted timezone band as UTC offsets,

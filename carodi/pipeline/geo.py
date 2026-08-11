@@ -129,6 +129,15 @@ def uninformative_location(location: str) -> bool:
 def annotate(opp: Opportunity) -> None:
     """Fill in `countries` and flag geographic openness of remote roles."""
     text = f"{opp.location_raw} {opp.title}"
+
+    # A source that states the country authoritatively is not second-guessed.
+    # EURES returns ISO codes directly, and guessing from its location string
+    # would be strictly worse -- "DE" matches none of the German hints, so the
+    # role would end up with no country at all and be rejected as unlocatable.
+    if opp.countries:
+        _annotate_remote_flags(opp, text)
+        return
+
     codes = detect_countries(text)
 
     # Fall back to the description only when the location field named no place
@@ -139,11 +148,15 @@ def annotate(opp: Opportunity) -> None:
         codes = detect_countries(opp.description[:600])
 
     opp.countries = sorted(set(codes))
+    _annotate_remote_flags(opp, text)
 
+
+def _annotate_remote_flags(opp: Opportunity, text: str) -> None:
+    """Flag how geographically open a remote role is."""
     hay = f" {slug(text)} "
     opp.enrichment["region_eu_wide"] = any(p in hay for p in _EU_WIDE)
     opp.enrichment["region_anywhere"] = any(p in hay for p in _ANYWHERE)
 
     # A remote role with no country signal at all is usually genuinely open.
-    if opp.remote is Remote.REMOTE and not codes:
+    if opp.remote is Remote.REMOTE and not opp.countries:
         opp.enrichment["region_anywhere"] = True

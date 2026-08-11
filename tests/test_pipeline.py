@@ -764,3 +764,24 @@ def test_timezone_rule_is_inert_without_configured_offsets():
     o = opp()
     o.enrichment["timezone_offsets"] = [-8, -5]
     assert not any("timezone" in r for r in rules.score(o)[1])
+
+
+def test_a_source_stated_country_is_not_second_guessed():
+    """EURES returns ISO codes directly. Re-deriving them from its location
+    string would find nothing -- 'DE' matches no German hint -- and the role
+    would be rejected as unlocatable."""
+    o = opp(location_raw="DE", countries=["DE"], description="Wir suchen Entwickler in Bayern.")
+    geo.annotate(o)
+    assert o.countries == ["DE"]
+
+
+def test_sources_without_a_stated_country_still_get_detection():
+    o = opp(location_raw="Berlin")
+    geo.annotate(o)
+    assert o.countries == ["DE"]
+
+
+def test_remote_flags_are_set_either_way():
+    stated = opp(location_raw="NL", countries=["NL"], remote=Remote.REMOTE)
+    geo.annotate(stated)
+    assert "region_anywhere" in stated.enrichment
