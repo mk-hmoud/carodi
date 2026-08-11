@@ -153,6 +153,23 @@ sources:
       description_field: description
       tags_field: tags
 
+  # -- national employment services ---------------------------------------
+  # Sweden's Arbetsförmedlingen publishes every ad in Platsbanken as an open
+  # API: no key, no registration, ~45k live vacancies. Authoritative, free, and
+  # nobody is defending it against you.
+  - type: jobtech
+    enabled: true
+    params:
+      name: jobtech-se
+      queries:
+        - software engineer
+        - software developer
+        - backend
+        - utvecklare          # Swedish postings often use only the local term
+        - systemutvecklare
+        - embedded
+      limit: 100
+
   # -- feeds --------------------------------------------------------------
   - type: rss
     enabled: true

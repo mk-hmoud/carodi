@@ -5,6 +5,7 @@ import pytest
 from carodi.models import Kind
 from carodi.sources.ats import guess_kind, guess_remote, strip_html
 from carodi.sources.feeds import HnWhoIsHiring
+from carodi.sources.gov import GovJson, JobTech
 
 
 @pytest.mark.parametrize(
@@ -102,3 +103,71 @@ def test_short_top_level_comments_are_skipped():
     thread = 1
     items = list(_FakeHn(thread, [_comment(2, thread, "we are hiring")]).fetch())
     assert items == []
+
+
+# -- national employment services ------------------------------------------
+
+
+class _FakeJobTech(JobTech):
+    def __init__(self, hits, **kw):
+        super().__init__(**kw)
+        self._hits = hits
+
+    def _get_json(self, url, **kwargs):
+        return {"hits": self._hits}
+
+
+def _se_hit(ad_id, headline="Backend Developer", municipality="Göteborg"):
+    return {
+        "id": ad_id,
+        "headline": headline,
+        "employer": {"name": "Volvo Cars"},
+        "workplace_address": {"municipality": municipality},
+        "webpage_url": f"https://arbetsformedlingen.se/platsbanken/annonser/{ad_id}",
+        "description": {"text": "<p>We are hiring engineers.</p>"},
+        "publication_date": "2026-08-11T16:12:20",
+        "application_deadline": "2026-09-10T23:59:59",
+        "occupation": {"label": "Mjukvaruutvecklare"},
+    }
+
+
+def test_jobtech_stamps_the_country_onto_the_location():
+    """geo.py knows Stockholm but not Laholm. An unrecognised town falls back to
+    scanning the description, so the source states the country it already knows."""
+    [opp] = list(_FakeJobTech([_se_hit("1", municipality="Laholm")]).fetch())
+    assert opp.location_raw == "Laholm, Sweden"
+
+    from carodi.pipeline import geo
+
+    geo.annotate(opp)
+    assert opp.countries == ["SE"]
+
+
+def test_jobtech_maps_the_fields_a_digest_needs():
+    [opp] = list(_FakeJobTech([_se_hit("42")]).fetch())
+    assert opp.org == "Volvo Cars"
+    assert opp.url.path.endswith("/42")
+    assert opp.description == "We are hiring engineers."
+    assert opp.deadline and opp.deadline.isoformat() == "2026-09-10"
+    assert "Mjukvaruutvecklare" in opp.tags
+
+
+def test_jobtech_dedupes_across_queries():
+    """One ad matches several queries; the run log should not double-count it."""
+    src = _FakeJobTech([_se_hit("7"), _se_hit("7")], queries=["a", "b"])
+    assert len(list(src.fetch())) == 1
+
+
+def test_jobtech_skips_records_missing_a_title_or_url():
+    bad = {"id": "9", "headline": "", "webpage_url": None}
+    assert list(_FakeJobTech([bad]).fetch()) == []
+
+
+def test_gov_json_stamps_a_fixed_country():
+    """National services do not repeat their own country in each listing."""
+    src = GovJson(name="x", url="https://e.test", country="Germany",
+                  title_field="titel", org_field="firma", url_field="link",
+                  location_field="ort", description_field="text")
+    src._get_json = lambda *a, **k: []          # unused; fetch() uses the client
+    assert src.country == "Germany"
+    assert src.fields["title"] == "titel"
